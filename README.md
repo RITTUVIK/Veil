@@ -10,7 +10,7 @@ The goal is simple: with one call, you can:
 
 ## What’s in this repo
 - `src/`: TypeScript SDK
-- `demo/`: React demo app (placeholder for now)
+- `demo/`: React demo app
 
 ## Core function
 
@@ -40,10 +40,12 @@ async function main() {
   // humanSigner is the wallet that controls `veil.eth` on Sepolia
   const provider = new ethers.JsonRpcProvider("https://rpc.sepolia.org");
   const humanWallet = new ethers.Wallet(process.env.HUMAN_PRIVATE_KEY!, provider);
+  const agentWallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY!, provider);
 
   const res = await registerAgentIdentity({
     provider,
     humanSigner: humanWallet,
+    agentSigner: agentWallet,
     agentWalletAddress: "0xYourAgentEOAAddressHere",
     label: "myagent",
   });
@@ -54,7 +56,8 @@ async function main() {
 ```
 
 ## Notes
-- This is intentionally minimal right now: it only writes the `addr(node)` record on the ENS `PublicResolver`.
+- This is intentionally minimal right now: it writes the ENS `addr(node)` forward record and sets reverse resolution, then registers the agent in ERC-8004.
 - You’ll need Sepolia ETH for the transactions.
 - The human wallet must be able to manage the `veil.eth` subnode (it should own/control `veil.eth` on Sepolia).
+- The agent wallet needs to sign an EIP-712 proof for `setAgentWallet()` (no transaction required from the agent wallet itself).
 

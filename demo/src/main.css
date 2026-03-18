@@ -1,0 +1,129 @@
+:root {
+  color-scheme: light;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: #ffffff;
+  color: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.card {
+  max-width: 720px;
+  margin: 0 auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: #374151;
+}
+
+input[type="text"] {
+  width: 220px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  outline: none;
+}
+
+button {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  background: #111827;
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 16px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+
+.step {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.step .name {
+  color: #111827;
+}
+
+.badge {
+  font-size: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: #374151;
+}
+
+.badge.ok {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.badge.run {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.badge.err {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.error {
+  margin-top: 12px;
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.success {
+  margin-top: 12px;
+  border: 1px solid #86efac;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 12px;
+  border-radius: 10px;
+}
+
