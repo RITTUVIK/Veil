@@ -1,0 +1,30 @@
+{
+  "name": "veil",
+  "version": "1.0.0",
+  "description": "Veil is an SDK that gives AI agents a verified identity on Ethereum using ENS names. Register your agent, give it a .eth name, and prove who owns it. All in minutes.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RITTUVIK/Veil.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/RITTUVIK/Veil/issues"
+  },
+  "homepage": "https://github.com/RITTUVIK/Veil#readme",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "ethers": "^6.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3"
+  }
+}
