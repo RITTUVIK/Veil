@@ -1,11 +1,11 @@
 # Veil
 
-Veil is a small SDK for registering an on-chain identity for an AI agent using `*.veil.eth` ENS names.
+Veil is a small SDK for registering an on-chain identity for an AI agent using `*.veilsdk.eth` ENS names.
 
 The goal is simple: with one call, you can:
-- Register `myagent.veil.eth` on Sepolia
-- Point `myagent.veil.eth` to an agent wallet (`addr` record only for now)
-- Set up reverse resolution so the agent wallet maps back to `myagent.veil.eth`
+- Register `myagent.veilsdk.eth` on Sepolia
+- Point `myagent.veilsdk.eth` to an agent wallet (`addr` record only for now)
+- Set up reverse resolution so the agent wallet maps back to `myagent.veilsdk.eth`
 - Register the agent in the ERC-8004 Identity Registry, linking the agent wallet and the human owner
 
 ## What’s in this repo
@@ -37,7 +37,7 @@ import { ethers } from "ethers";
 import { registerAgentIdentity } from "./src";
 
 async function main() {
-  // humanSigner is the wallet that controls `veil.eth` on Sepolia
+  // humanSigner is the wallet that controls `veilsdk.eth` on Sepolia
   const provider = new ethers.JsonRpcProvider("https://rpc.sepolia.org");
   const humanWallet = new ethers.Wallet(process.env.HUMAN_PRIVATE_KEY!, provider);
   const agentWallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY!, provider);
@@ -58,6 +58,6 @@ async function main() {
 ## Notes
 - This is intentionally minimal right now: it writes the ENS `addr(node)` forward record and sets reverse resolution, then registers the agent in ERC-8004.
 - You’ll need Sepolia ETH for the transactions.
-- The human wallet must be able to manage the `veil.eth` subnode (it should own/control `veil.eth` on Sepolia).
+- The human wallet must be able to manage the `veilsdk.eth` subnode (it should own/control `veilsdk.eth` on Sepolia).
 - The agent wallet needs to sign an EIP-712 proof for `setAgentWallet()` (no transaction required from the agent wallet itself).
 

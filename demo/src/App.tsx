@@ -129,7 +129,7 @@ export default function App() {
         </button>
 
         <div>
-          <label htmlFor="label">Agent label (ENS name: &lt;label&gt;.veil.eth)</label>
+          <label htmlFor="label">Agent label (ENS name: &lt;label&gt;.veilsdk.eth)</label>
           <input
             id="label"
             type="text"

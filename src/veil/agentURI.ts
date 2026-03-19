@@ -1,7 +1,7 @@
 import { toUtf8Bytes } from "ethers";
 
 export type AgentURIInput = {
-  agentName: string; // fully qualified ENS name, e.g. myagent.veil.eth
+  agentName: string; // fully qualified ENS name, e.g. myagent.veilsdk.eth
   description?: string;
   image?: string;
 

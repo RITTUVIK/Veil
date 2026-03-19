@@ -21,3 +21,14 @@ pnpm-debug.log*
 .idea/
 .fleet/
 
+# Local scratch JSON artifacts (keep package/tsconfig tracked)
+moltbook_*.json
+transfer*.json
+register.json
+
+# Ignore other root JSON artifacts by default
+/*.json
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+

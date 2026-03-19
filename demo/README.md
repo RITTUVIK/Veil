@@ -6,7 +6,7 @@ It lets you:
 
 1. Connect MetaMask (Sepolia)
 2. Enter an ENS label (example: `myagent`)
-3. Click one button to register `myagent.veil.eth`
+3. Click one button to register `myagent.veilsdk.eth`
 4. See progress as each step completes:
    - ENS forward + reverse resolution
    - ERC-8004 register

@@ -5,7 +5,7 @@ import { createAgentURIDataURI } from "./agentURI";
 export type RegisterAgentIdentityParams = {
   provider: ethers.Provider;
 
-  // Human verifier/identity owner. This wallet must be the current owner of `veil.eth`
+  // Human verifier/identity owner. This wallet must be the current owner of `veilsdk.eth`
   // (so it can create subnodes), and it will register the agent in ERC-8004.
   humanSigner: ethers.Signer;
 
@@ -16,10 +16,10 @@ export type RegisterAgentIdentityParams = {
   // EOA address for the AI agent (the address ENS will point to).
   agentWalletAddress: string;
 
-  // Subdomain label (e.g. "myagent" for "myagent.veil.eth").
+  // Subdomain label (e.g. "myagent" for "myagent.veilsdk.eth").
   label: string;
 
-  rootName?: string; // default: "veil.eth"
+  rootName?: string; // default: "veilsdk.eth"
 
   // Optional overrides (useful if you deploy to a different testnet).
   identityRegistryAddress?: string; // default: official ERC-8004 Identity Registry on Sepolia
@@ -59,7 +59,7 @@ export type RegisterAgentIdentityResult = {
 
 // Sepolia defaults from ENS deployment registry + ERC-8004 official address.
 const DEFAULTS = {
-  rootName: "veil.eth",
+  rootName: "veilsdk.eth",
 
   // ENS (Sepolia)
   ensRegistryAddress: "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e",
@@ -142,7 +142,7 @@ export async function registerAgentIdentity(
     humanSigner,
   );
 
-  const veilNode = namehash(rootName);
+  const parentNode = namehash(rootName);
   const labelHash = labelhash(params.label);
   const agentNode = namehash(agentEnsName);
   const reverseNode = addressToReverseNode(agentWalletAddress);
@@ -150,22 +150,22 @@ export async function registerAgentIdentity(
   const txHashes: RegisterAgentIdentityResult["txHashes"] = {};
 
   // ENS ownership pre-check.
-  // We use `setSubnodeOwner(veilNode, labelHash, humanAddress)`, which requires `humanAddress`
-  // to be the owner of `veil.eth` in the ENSRegistry.
-  const veilOwner = await ensRegistry.owner(veilNode);
-  if (veilOwner.toLowerCase() !== humanAddress.toLowerCase()) {
+  // We use `setSubnodeOwner(parentNode, labelHash, humanAddress)`, which requires `humanAddress`
+  // to be the owner of `veilsdk.eth` (or whichever rootName is provided) in the ENSRegistry.
+  const rootOwner = await ensRegistry.owner(parentNode);
+  if (rootOwner.toLowerCase() !== humanAddress.toLowerCase()) {
     throw new Error(
       [
-        "Human wallet must own `veil.eth` on this network before registering an agent.",
+        `Human wallet must own \`${rootName}\` on this network before registering an agent.`,
         `Your human wallet: ${humanAddress}`,
-        `Current ` + "`" + rootName + "`" + " owner: " + veilOwner,
-        "Transfer/assign ownership of `veil.eth` to your wallet, then try again.",
+        `Current \`${rootName}\` owner: ${rootOwner}`,
+        `Transfer/assign ownership of \`${rootName}\` to your wallet, then try again.`,
       ].join("\n"),
     );
   }
 
-  // 1) ENS: veil.eth -> myagent.veil.eth
-  const tx1 = await ensRegistry.setSubnodeOwner(veilNode, labelHash, humanAddress);
+  // 1) ENS: veilsdk.eth -> myagent.veilsdk.eth
+  const tx1 = await ensRegistry.setSubnodeOwner(parentNode, labelHash, humanAddress);
   txHashes.ensSetSubnodeOwner = tx1.hash;
   await tx1.wait();
   params.onStep?.("ens_subnodeOwner", tx1.hash);
@@ -176,13 +176,13 @@ export async function registerAgentIdentity(
   await tx2.wait();
   params.onStep?.("ens_setResolver", tx2.hash);
 
-  // 3) ENS: point addr(myagent.veil.eth) to agent wallet
+  // 3) ENS: point addr(myagent.veilsdk.eth) to agent wallet
   const tx3 = await publicResolver.setAddr(agentNode, agentWalletAddress);
   txHashes.ensSetAddr = tx3.hash;
   await tx3.wait();
   params.onStep?.("ens_setAddr", tx3.hash);
 
-  // 4) Reverse resolution: agentWallet -> myagent.veil.eth
+  // 4) Reverse resolution: agentWallet -> myagent.veilsdk.eth
   // claimForAddr sets reverse owner to the human so we can call publicResolver.setName next.
   const tx4 = await reverseRegistrar.claimForAddr(
     agentWalletAddress,
