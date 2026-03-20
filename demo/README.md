@@ -4,7 +4,7 @@ This is a small React demo for the Veil SDK.
 
 It lets you:
 
-1. Connect MetaMask (Sepolia)
+1. Connect a wallet (Sepolia)
 2. Enter an ENS label (example: `myagent`)
 3. Click one button to register `myagent.veilsdk.eth`
 4. See progress as each step completes:
@@ -25,5 +25,5 @@ npm run dev
 
 Then open the local URL Vite prints (usually `http://localhost:5173`).
 
-Make sure MetaMask is connected to Sepolia before registering.
+Make sure your wallet is connected to Sepolia before registering.
 

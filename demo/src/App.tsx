@@ -1,231 +1,166 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ethers } from "ethers";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, useChainId, useSwitchChain } from "wagmi";
+import { getWalletClient } from "wagmi/actions";
+import { useConnectModal, useAccountModal } from "@rainbow-me/rainbowkit";
+import { sepolia } from "wagmi/chains";
+import { config } from "./wagmi";
+import { walletClientToEthers } from "./lib/ethersAdapter";
 import {
   registerAgentIdentity,
   type RegisterAgentIdentityStep,
 } from "../../src";
 import { LampContainer } from "./components/ui/lamp";
-import { motion, AnimatePresence } from "framer-motion";
+import { IdentityCard } from "./components/IdentityCard";
+import { LocusCard } from "./components/LocusCard";
+import { ExecutionCard } from "./components/ExecutionCard";
 import {
-  Wallet,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  ExternalLink,
-  ChevronDown,
-} from "lucide-react";
+  registerLocusAgent,
+  getLocusWalletStatus,
+  getLocusPolicySnapshot,
+  resetLocusState,
+  type LocusAgent,
+  type LocusWalletStatus,
+  type LocusPolicySnapshot,
+} from "./services/locus";
+import { truncAddr } from "./lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import { Wallet, CheckCircle, XCircle, Loader2 } from "lucide-react";
 
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
+// ────────────────────────────────────────────────────────────
+// Step / state types
+// ────────────────────────────────────────────────────────────
 
-const SEPOLIA_CHAIN_ID = 11155111;
-const SEPOLIA_CHAIN_HEX = "0xaa36a7";
-
-type AppState = "disconnected" | "ready" | "registering" | "success";
+type Phase = "idle" | "registering" | "dashboard";
+type DemoStepKey = RegisterAgentIdentityStep | "locus_register";
 type StepStatus = "idle" | "running" | "ok" | "error";
 
 interface StepInfo {
-  key: RegisterAgentIdentityStep;
+  key: DemoStepKey;
   label: string;
   status: StepStatus;
   txHash?: string;
 }
 
-const ALL_STEPS: { key: RegisterAgentIdentityStep; label: string }[] = [
-  { key: "ens_subnodeOwner", label: "ENS subdomain creation" },
-  { key: "ens_setResolver", label: "ENS resolver setup" },
-  { key: "ens_setAddr", label: "ENS address record" },
-  { key: "ens_reverseClaim", label: "ENS reverse claim" },
-  { key: "ens_reverseSetName", label: "ENS reverse name" },
-  { key: "erc8004_register", label: "ERC-8004 passport" },
-  { key: "erc8004_setAgentWallet", label: "ERC-8004 agent wallet link" },
+const ALL_STEPS: { key: DemoStepKey; label: string }[] = [
+  { key: "ens_subnodeOwner", label: "Create agent subdomain" },
+  { key: "ens_setResolver", label: "Attach name resolver" },
+  { key: "ens_setAddr", label: "Link name to wallet" },
+  { key: "ens_reverseClaim", label: "Claim reverse record" },
+  { key: "ens_reverseSetName", label: "Set reverse name" },
+  { key: "erc8004_register", label: "Register on-chain identity" },
+  { key: "erc8004_setAgentWallet", label: "Link agent wallet" },
+  { key: "locus_register", label: "Set up spend wallet" },
 ];
 
-const TX_DISPLAY: Record<string, string> = {
-  ensSetSubnodeOwner: "ENS Subdomain",
-  ensSetResolver: "ENS Resolver",
-  ensSetAddr: "ENS Address",
-  reverseClaimForAddr: "Reverse Claim",
-  reverseSetName: "Reverse Name",
-  erc8004Register: "ERC-8004 Register",
-  erc8004SetAgentWallet: "Agent Wallet Link",
-};
+const IDENTITY_STEP_KEYS = ALL_STEPS
+  .filter((s) => s.key !== "locus_register")
+  .map((s) => s.key);
 
-function truncAddr(addr: string) {
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
-
-function truncHash(hash: string) {
-  return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
-}
-
-function getInjectedProvider(): any {
-  const eth = window.ethereum;
-  if (!eth) return undefined;
-
-  // When multiple wallets are installed, prefer MetaMask explicitly.
-  const providers: any[] = Array.isArray(eth.providers) ? eth.providers : [eth];
-  const metaMaskProvider = providers.find((p) => p?.isMetaMask);
-  return metaMaskProvider ?? eth;
-}
+// ────────────────────────────────────────────────────────────
+// App
+// ────────────────────────────────────────────────────────────
 
 export default function App() {
+  // ── Wallet (wagmi + RainbowKit) ────────────────────────
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
+  const { openAccountModal } = useAccountModal();
+
+  const onWrongNetwork = isConnected && chainId !== sepolia.id;
+
+  // ── App phase ──────────────────────────────────────────
   const requestIdRef = useRef(0);
-  const [appState, setAppState] = useState<AppState>("disconnected");
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>("idle");
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [onWrongNetwork, setOnWrongNetwork] = useState(false);
-  const [agentWalletAddress, setAgentWalletAddress] = useState<string | null>(
-    null,
-  );
+  const [agentWalletAddress, setAgentWalletAddress] = useState<string | null>(null);
   const [result, setResult] = useState<null | {
     agentEnsName: string;
     txHashes: Record<string, string | undefined>;
   }>(null);
-  const [txExpanded, setTxExpanded] = useState(false);
   const [steps, setSteps] = useState<StepInfo[]>(
     ALL_STEPS.map((s) => ({ ...s, status: "idle" as StepStatus })),
   );
 
+  // Locus state
+  const [locusAgent, setLocusAgent] = useState<LocusAgent | null>(null);
+  const [locusWallet, setLocusWallet] = useState<LocusWalletStatus | null>(null);
+  const [locusPolicy, setLocusPolicy] = useState<LocusPolicySnapshot | null>(null);
+
   const labelSanitized = useMemo(() => label.trim().toLowerCase(), [label]);
 
-  async function getCurrentChainId(): Promise<number> {
-    const provider = getInjectedProvider();
-    if (!provider) throw new Error("No EVM wallet found. Install MetaMask.");
-    const hex = await provider.request({ method: "eth_chainId" });
-    return Number.parseInt(String(hex), 16);
-  }
+  // Derive display state from connection + phase
+  const appState = !isConnected
+    ? "disconnected"
+    : phase === "registering"
+      ? "registering"
+      : phase === "dashboard"
+        ? "dashboard"
+        : "ready";
 
-  async function switchToSepolia(): Promise<void> {
-    const provider = getInjectedProvider();
-    if (!provider)
-      throw new Error("MetaMask not found. Please install/enable MetaMask.");
-    try {
-      await provider.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: SEPOLIA_CHAIN_HEX }],
-      });
-    } catch (switchError: any) {
-      if (switchError?.code === 4902) {
-        await provider.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: SEPOLIA_CHAIN_HEX,
-              chainName: "Sepolia",
-              nativeCurrency: {
-                name: "Sepolia ETH",
-                symbol: "ETH",
-                decimals: 18,
-              },
-              rpcUrls: ["https://rpc.sepolia.org"],
-              blockExplorerUrls: ["https://sepolia.etherscan.io"],
-            },
-          ],
-        });
-        return;
-      }
-      throw switchError;
+  // ── Sync: reset when wallet disconnects or account changes ──
+
+  const prevAddressRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const prev = prevAddressRef.current;
+    prevAddressRef.current = address;
+
+    if (!isConnected || (prev && address && prev !== address)) {
+      requestIdRef.current += 1;
+      setPhase("idle");
+      setError(null);
+      setResult(null);
+      setAgentWalletAddress(null);
+      setSteps(ALL_STEPS.map((s) => ({ ...s, status: "idle" })));
+      setLocusAgent(null);
+      setLocusWallet(null);
+      setLocusPolicy(null);
+      resetLocusState();
     }
-  }
+  }, [isConnected, address]);
 
-  async function syncWalletState(preferredAddress?: string | null) {
-    const provider = getInjectedProvider();
-    if (!provider) return;
-
-    const accountsRaw = (await provider.request({
-      method: "eth_accounts",
-    })) as string[];
-    const accounts = accountsRaw.map((a) => String(a));
-
-    if (accounts.length === 0) {
-      setWalletAddress(null);
-      setAppState("disconnected");
-      return;
-    }
-
-    const selected =
-      (preferredAddress &&
-        accounts.find(
-          (a) => a.toLowerCase() === preferredAddress.toLowerCase(),
-        )) ||
-      (walletAddress &&
-        accounts.find(
-          (a) => a.toLowerCase() === walletAddress.toLowerCase(),
-        )) ||
-      accounts[0];
-
-    setWalletAddress(selected);
-    if (appState === "disconnected") setAppState("ready");
-
-    const chainId = await getCurrentChainId();
-    setOnWrongNetwork(chainId !== SEPOLIA_CHAIN_ID);
-  }
-
-  async function connectWallet() {
-    setError(null);
-    try {
-      const provider = getInjectedProvider();
-      if (!provider) throw new Error("Install MetaMask to continue.");
-
-      await provider.request({ method: "eth_requestAccounts" });
-      await syncWalletState();
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    }
-  }
-
-  async function onManualSwitchNetwork() {
-    setError(null);
-    try {
-      await switchToSepolia();
-      setOnWrongNetwork(false);
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    }
-  }
+  // ── Registration (identity + Locus) ────────────────────
 
   async function onRegister() {
     const requestId = ++requestIdRef.current;
     setError(null);
     setResult(null);
-    setTxExpanded(false);
     setAgentWalletAddress(null);
+    setLocusAgent(null);
+    setLocusWallet(null);
+    setLocusPolicy(null);
+    resetLocusState();
     setSteps(ALL_STEPS.map((s) => ({ ...s, status: "idle" })));
-    setAppState("registering");
+    setPhase("registering");
 
     setSteps((prev) =>
       prev.map((s, i) => (i === 0 ? { ...s, status: "running" } : s)),
     );
 
     try {
-      const injectedProvider = getInjectedProvider();
-      if (!injectedProvider) throw new Error("No wallet found.");
       if (!labelSanitized) throw new Error("Enter an agent name.");
 
-      const provider = new ethers.BrowserProvider(injectedProvider);
-      const selectedAddress = walletAddress ?? undefined;
-      const humanSigner = selectedAddress
-        ? await provider.getSigner(selectedAddress)
-        : await provider.getSigner();
-      const humanAddress = await humanSigner.getAddress();
+      const walletClient = await getWalletClient(config);
+      if (!walletClient) throw new Error("Wallet not connected.");
 
-      const currentChainId = await getCurrentChainId();
-      if (currentChainId !== SEPOLIA_CHAIN_ID) {
+      if (walletClient.chain.id !== sepolia.id) {
         throw new Error(
-          `Switch to Sepolia first (current chain: ${currentChainId}).`,
+          `Switch to Sepolia first (currently on ${walletClient.chain.name}).`,
         );
       }
+
+      const { provider, signer: humanSigner } =
+        await walletClientToEthers(walletClient);
+      const humanAddress = await humanSigner.getAddress();
 
       const agentSigner = humanSigner;
       const agentWallet = humanAddress;
       setAgentWalletAddress(agentWallet);
 
-      const stepKeys = ALL_STEPS.map((s) => s.key);
+      // ── Steps 1-7: Veil identity registration ──
 
       const res = await registerAgentIdentity({
         provider,
@@ -240,9 +175,9 @@ export default function App() {
               s.key === step ? { ...s, status: "ok", txHash } : s,
             ),
           );
-          const idx = stepKeys.indexOf(step);
-          if (idx < stepKeys.length - 1) {
-            const nextKey = stepKeys[idx + 1];
+          const idx = IDENTITY_STEP_KEYS.indexOf(step);
+          if (idx >= 0 && idx < IDENTITY_STEP_KEYS.length - 1) {
+            const nextKey = IDENTITY_STEP_KEYS[idx + 1];
             setSteps((prev) =>
               prev.map((s) =>
                 s.key === nextKey ? { ...s, status: "running" } : s,
@@ -254,7 +189,34 @@ export default function App() {
 
       if (requestIdRef.current !== requestId) return;
       setResult(res);
-      setAppState("success");
+
+      // ── Step 8: Locus wallet setup ──
+
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.key === "locus_register" ? { ...s, status: "running" } : s,
+        ),
+      );
+
+      const agent = await registerLocusAgent(res.agentEnsName, agentWallet);
+      if (requestIdRef.current !== requestId) return;
+
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.key === "locus_register" ? { ...s, status: "ok" } : s,
+        ),
+      );
+      setLocusAgent(agent);
+
+      const [wallet, policy] = await Promise.all([
+        getLocusWalletStatus(agent),
+        getLocusPolicySnapshot(),
+      ]);
+      if (requestIdRef.current !== requestId) return;
+
+      setLocusWallet(wallet);
+      setLocusPolicy(policy);
+      setPhase("dashboard");
     } catch (e: any) {
       if (requestIdRef.current !== requestId) return;
       setError(e?.message ?? String(e));
@@ -266,52 +228,33 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    const provider = getInjectedProvider();
-    if (!provider) return;
+  // ── Locus refresh (called after successful payment) ────
 
-    const handleAccountsChanged = (accounts: string[]) => {
-      if (!accounts || accounts.length === 0) {
-        requestIdRef.current += 1;
-        setWalletAddress(null);
-        setAppState("disconnected");
-        setOnWrongNetwork(false);
-        setResult(null);
-        setAgentWalletAddress(null);
-        setSteps(ALL_STEPS.map((s) => ({ ...s, status: "idle" })));
-        return;
-      }
-      requestIdRef.current += 1;
-      setWalletAddress(accounts[0]);
-      setAppState("ready");
-      setResult(null);
-      setAgentWalletAddress(null);
-      setSteps(ALL_STEPS.map((s) => ({ ...s, status: "idle" })));
-    };
+  const refreshLocusState = useCallback(async () => {
+    if (!locusAgent) return;
+    const [wallet, policy] = await Promise.all([
+      getLocusWalletStatus(locusAgent),
+      getLocusPolicySnapshot(),
+    ]);
+    setLocusWallet(wallet);
+    setLocusPolicy(policy);
+  }, [locusAgent]);
 
-    const handleChainChanged = (chainHex: string) => {
-      const chainId = Number.parseInt(String(chainHex), 16);
-      setOnWrongNetwork(chainId !== SEPOLIA_CHAIN_ID);
-    };
-
-    provider.on?.("accountsChanged", handleAccountsChanged);
-    provider.on?.("chainChanged", handleChainChanged);
-
-    syncWalletState().catch(() => {});
-
-    return () => {
-      provider?.removeListener?.("accountsChanged", handleAccountsChanged);
-      provider?.removeListener?.("chainChanged", handleChainChanged);
-    };
-  }, []);
+  // ── Reset ──────────────────────────────────────────────
 
   function resetToReady() {
-    setAppState("ready");
+    setPhase("idle");
     setError(null);
     setResult(null);
     setLabel("");
     setSteps(ALL_STEPS.map((s) => ({ ...s, status: "idle" })));
+    setLocusAgent(null);
+    setLocusWallet(null);
+    setLocusPolicy(null);
+    resetLocusState();
   }
+
+  // ── Animations ─────────────────────────────────────────
 
   const fadeSlide = {
     initial: { opacity: 0, y: 24 },
@@ -320,12 +263,111 @@ export default function App() {
     transition: { duration: 0.35, ease: "easeOut" as const },
   };
 
+  // ══════════════════════════════════════════════════════════
+  // RENDER: Dashboard
+  // ══════════════════════════════════════════════════════════
+
+  if (appState === "dashboard") {
+    return (
+      <div className="min-h-screen bg-black">
+        <div className="h-1 bg-gradient-to-r from-blue-600 via-violet-500 to-emerald-500" />
+
+        <div className="max-w-2xl mx-auto px-4 pt-8 pb-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-white tracking-tight">
+              Veil
+            </h1>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={resetToReady}
+                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                New Agent
+              </button>
+              {address && (
+                <button
+                  onClick={openAccountModal}
+                  className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1.5 hover:bg-white/[0.06] transition-colors"
+                >
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                  <span className="text-xs text-slate-400 font-mono">
+                    {truncAddr(address)}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Agent hero */}
+        {result && (
+          <div className="max-w-2xl mx-auto px-4 pb-4">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="flex items-center gap-4"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 14, delay: 0.1 }}
+                className="w-11 h-11 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0"
+              >
+                <CheckCircle className="w-6 h-6 text-green-400" />
+              </motion.div>
+              <div>
+                <p className="text-2xl font-mono text-blue-400 font-semibold leading-tight">
+                  {result.agentEnsName}
+                </p>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Named, verified, and ready to operate
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        <div className="max-w-2xl mx-auto px-4 pb-12 space-y-4">
+          {result && agentWalletAddress && address && (
+            <motion.div {...fadeSlide}>
+              <IdentityCard
+                agentEnsName={result.agentEnsName}
+                agentWalletAddress={agentWalletAddress}
+                ownerAddress={address}
+                txHashes={result.txHashes}
+              />
+            </motion.div>
+          )}
+
+          <motion.div {...fadeSlide} transition={{ delay: 0.1 }}>
+            <LocusCard walletStatus={locusWallet} policy={locusPolicy} />
+          </motion.div>
+
+          {locusAgent && locusPolicy && (
+            <motion.div {...fadeSlide} transition={{ delay: 0.2 }}>
+              <ExecutionCard
+                agent={locusAgent}
+                policy={locusPolicy}
+                onPolicyRefresh={refreshLocusState}
+              />
+            </motion.div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // RENDER: Lamp states (disconnected / ready / registering)
+  // ══════════════════════════════════════════════════════════
+
   return (
     <LampContainer className="bg-black">
       <div className="w-full max-w-lg px-4">
         {/* Top bar: wallet badge + network warning */}
         <AnimatePresence>
-          {walletAddress && appState !== "disconnected" && (
+          {address && appState !== "disconnected" && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -333,35 +375,37 @@ export default function App() {
             >
               {onWrongNetwork && (
                 <button
-                  onClick={onManualSwitchNetwork}
+                  onClick={() => switchChain({ chainId: sepolia.id })}
                   className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-medium rounded-full px-3 py-1.5 hover:bg-amber-500/20 transition-colors"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                   Switch to Sepolia
                 </button>
               )}
-              <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1.5">
+              <button
+                onClick={openAccountModal}
+                className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1.5 hover:bg-white/[0.06] transition-colors"
+              >
                 <div
                   className={`w-1.5 h-1.5 rounded-full ${
                     onWrongNetwork ? "bg-amber-400" : "bg-green-400"
                   }`}
                 />
                 <span className="text-xs text-slate-400 font-mono">
-                  {truncAddr(walletAddress)}
+                  {truncAddr(address)}
                 </span>
-              </div>
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Main glass card */}
         <div className="relative bg-white/[0.03] backdrop-blur-2xl border border-blue-500/[0.15] rounded-2xl shadow-2xl shadow-blue-500/[0.06] overflow-hidden">
-          {/* Subtle top glow */}
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/40 to-transparent" />
 
           <div className="p-8 sm:p-10">
             <AnimatePresence mode="wait">
-              {/* ─── STATE 1: Disconnected ─── */}
+              {/* ─── Disconnected ─── */}
               {appState === "disconnected" && (
                 <motion.div
                   key="disconnected"
@@ -371,11 +415,11 @@ export default function App() {
                   <h1 className="text-5xl sm:text-6xl font-bold text-white tracking-tight mb-3">
                     Veil
                   </h1>
-                  <p className="text-slate-400 text-base sm:text-lg mb-10 max-w-xs">
-                    Identity Infrastructure for AI Agents
+                  <p className="text-slate-400 text-base sm:text-lg mb-10 max-w-xs leading-relaxed">
+                    Identity and spend control for autonomous agents
                   </p>
                   <motion.button
-                    onClick={() => connectWallet()}
+                    onClick={openConnectModal}
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
                     className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold px-8 py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/30"
@@ -388,7 +432,7 @@ export default function App() {
                 </motion.div>
               )}
 
-              {/* ─── STATE 2: Ready ─── */}
+              {/* ─── Ready ─── */}
               {appState === "ready" && (
                 <motion.div
                   key="ready"
@@ -411,8 +455,7 @@ export default function App() {
                         placeholder="myagent"
                         className="flex-1 bg-transparent text-white text-lg px-4 py-3.5 outline-none placeholder:text-slate-700 font-mono"
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" && labelSanitized)
-                            onRegister();
+                          if (e.key === "Enter" && labelSanitized) onRegister();
                         }}
                       />
                       <span className="text-slate-600 pr-4 text-sm font-mono">
@@ -440,7 +483,7 @@ export default function App() {
                 </motion.div>
               )}
 
-              {/* ─── STATE 3: Registering ─── */}
+              {/* ─── Registering ─── */}
               {appState === "registering" && (
                 <motion.div key="registering" {...fadeSlide}>
                   <h2 className="text-xl font-semibold text-white mb-1 text-center">
@@ -463,7 +506,9 @@ export default function App() {
                         }}
                         className={`flex items-center justify-between py-3 px-4 rounded-xl transition-colors duration-300 ${
                           step.status === "running"
-                            ? "bg-blue-500/[0.06] border border-blue-500/[0.12]"
+                            ? step.key === "locus_register"
+                              ? "bg-emerald-500/[0.06] border border-emerald-500/[0.12]"
+                              : "bg-blue-500/[0.06] border border-blue-500/[0.12]"
                             : step.status === "ok"
                               ? "bg-green-500/[0.04] border border-green-500/[0.08]"
                               : step.status === "error"
@@ -506,129 +551,6 @@ export default function App() {
                   )}
                 </motion.div>
               )}
-
-              {/* ─── STATE 4: Success ─── */}
-              {appState === "success" && result && (
-                <motion.div
-                  key="success"
-                  {...fadeSlide}
-                  className="flex flex-col items-center text-center"
-                >
-                  <motion.div
-                    initial={{ scale: 0, rotate: -180 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 200,
-                      damping: 12,
-                    }}
-                    className="mb-5"
-                  >
-                    <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center">
-                      <CheckCircle className="w-9 h-9 text-green-400" />
-                    </div>
-                  </motion.div>
-
-                  <motion.h2
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="text-2xl font-semibold text-white mb-3"
-                  >
-                    Agent Registered
-                  </motion.h2>
-
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                    className="text-2xl font-mono text-blue-400 mb-1"
-                  >
-                    {result.agentEnsName}
-                  </motion.p>
-
-                  {agentWalletAddress && (
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.35 }}
-                      className="text-sm text-slate-500 font-mono mb-8"
-                    >
-                      {truncAddr(agentWalletAddress)}
-                    </motion.p>
-                  )}
-
-                  {/* Collapsible tx hashes */}
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.4 }}
-                    className="w-full"
-                  >
-                    <button
-                      onClick={() => setTxExpanded(!txExpanded)}
-                      className="flex items-center justify-center gap-2 text-sm text-slate-500 hover:text-slate-300 transition-colors mx-auto mb-3"
-                    >
-                      View Transaction Hashes
-                      <motion.div
-                        animate={{ rotate: txExpanded ? 180 : 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </motion.div>
-                    </button>
-
-                    <AnimatePresence>
-                      {txExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25, ease: "easeInOut" }}
-                          className="overflow-hidden"
-                        >
-                          <div className="space-y-1 bg-white/[0.02] rounded-xl border border-white/[0.06] p-3">
-                            {Object.entries(result.txHashes).map(
-                              ([key, hash]) =>
-                                hash && (
-                                  <div
-                                    key={key}
-                                    className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/[0.03] transition-colors"
-                                  >
-                                    <span className="text-xs text-slate-500">
-                                      {TX_DISPLAY[key] ?? key}
-                                    </span>
-                                    <a
-                                      href={`https://sepolia.etherscan.io/tx/${hash}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-mono transition-colors"
-                                    >
-                                      {truncHash(hash)}
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                  </div>
-                                ),
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-
-                  <motion.button
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.45 }}
-                    onClick={resetToReady}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="mt-6 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-300 font-medium px-8 py-3 rounded-xl transition-all duration-200"
-                  >
-                    Register Another Agent
-                  </motion.button>
-                </motion.div>
-              )}
             </AnimatePresence>
           </div>
         </div>
@@ -636,6 +558,10 @@ export default function App() {
     </LampContainer>
   );
 }
+
+// ────────────────────────────────────────────────────────────
+// Shared sub-components
+// ────────────────────────────────────────────────────────────
 
 function StepIcon({ status }: { status: StepStatus }) {
   if (status === "idle")

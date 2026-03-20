@@ -7,3 +7,8 @@ body {
   padding: 0;
   background: #000000;
 }
+
+/* RainbowKit modal blends with dark UI */
+[data-rk] {
+  --rk-colors-modalBackground: rgba(10, 10, 10, 0.95);
+}

@@ -69,7 +69,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`, connect MetaMask on Sepolia, enter a label, and click Register agent.
+Open `http://localhost:5173`, connect a wallet on Sepolia, enter a label, and click Register agent.
 
 ---
 
