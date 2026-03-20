@@ -61,9 +61,10 @@ export type RegisterAgentIdentityResult = {
 const DEFAULTS = {
   rootName: "veilsdk.eth",
 
-  // ENS (Sepolia)
+  // ENS (Sepolia) — see ensdomains/ens-contracts `deployments/sepolia/*.json`
   ensRegistryAddress: "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e",
   publicResolverAddress: "0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5",
+  // L1 ReverseRegistrar (classic addr.reverse in the ENS registry). Not the DefaultReverseRegistrar (0x4F38…).
   reverseRegistrarAddress: "0xA0a1AbcDAe1a2a4A2EF8e9113Ff0e02DD81DC0C6",
 
   // ERC-8004 (Sepolia)
@@ -103,6 +104,20 @@ function normalizeAddress(addr: string): string {
   return ethers.getAddress(addr);
 }
 
+/**
+ * Ethers v6: `JsonRpcSigner` (e.g. MetaMask) cannot be reconnected with `.connect(provider)`.
+ * Only attach a provider when the signer has none (typical for a bare `Wallet`).
+ */
+function withProvider(signer: ethers.Signer, provider: ethers.Provider): ethers.Signer {
+  if (signer.provider != null) {
+    return signer;
+  }
+  if (signer instanceof ethers.Wallet) {
+    return signer.connect(provider);
+  }
+  return signer;
+}
+
 export async function registerAgentIdentity(
   params: RegisterAgentIdentityParams,
 ): Promise<RegisterAgentIdentityResult> {
@@ -110,10 +125,10 @@ export async function registerAgentIdentity(
 
   const rootName = params.rootName ?? DEFAULTS.rootName;
 
-  const humanSigner = params.humanSigner.connect(params.provider);
+  const humanSigner = withProvider(params.humanSigner, params.provider);
   const humanAddress = await humanSigner.getAddress();
   const agentWalletAddress = normalizeAddress(params.agentWalletAddress);
-  const agentSigner = params.agentSigner.connect(params.provider);
+  const agentSigner = withProvider(params.agentSigner, params.provider);
   const agentSignerAddress = normalizeAddress(await agentSigner.getAddress());
   if (agentSignerAddress.toLowerCase() !== agentWalletAddress.toLowerCase()) {
     throw new Error(
@@ -131,10 +146,13 @@ export async function registerAgentIdentity(
 
   const ensRegistry = new ethers.Contract(ensRegistryAddress, ENS_REGISTRY_ABI, humanSigner);
   const publicResolver = new ethers.Contract(publicResolverAddress, PUBLIC_RESOLVER_ABI, humanSigner);
-  const reverseRegistrar = new ethers.Contract(
+  // L1 ReverseRegistrar.claimForAddr(addr, owner, resolver) uses `authorised(addr)`:
+  // msg.sender must be `addr` (or a controller / ENS operator). The human cannot claim
+  // the reverse node *for* the agent in one tx — the agent address must send this tx.
+  const reverseRegistrarAsAgent = new ethers.Contract(
     reverseRegistrarAddress,
     REVERSE_REGISTRAR_ABI,
-    humanSigner,
+    agentSigner,
   );
   const identityRegistry = new ethers.Contract(
     identityRegistryAddress,
@@ -183,8 +201,21 @@ export async function registerAgentIdentity(
   params.onStep?.("ens_setAddr", tx3.hash);
 
   // 4) Reverse resolution: agentWallet -> myagent.veilsdk.eth
-  // claimForAddr sets reverse owner to the human so we can call publicResolver.setName next.
-  const tx4 = await reverseRegistrar.claimForAddr(
+  // claimForAddr must be sent *from the agent wallet* (see ReverseRegistrar.authorised(addr)).
+  // It sets the reverse node's owner to the human, who then sets the name on the resolver.
+  const agentBal = await params.provider.getBalance(agentWalletAddress);
+  if (agentBal === 0n) {
+    throw new Error(
+      [
+        "The agent wallet needs a small amount of native ETH (Sepolia ETH) to submit ENS reverse setup.",
+        "ReverseRegistrar.claimForAddr(...) must be called with msg.sender equal to the agent address.",
+        `Agent address: ${agentWalletAddress}`,
+        "Fund that address with test ETH, or use the same wallet as both human and agent (demo default).",
+      ].join("\n"),
+    );
+  }
+
+  const tx4 = await reverseRegistrarAsAgent.claimForAddr(
     agentWalletAddress,
     humanAddress,
     publicResolverAddress,

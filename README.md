@@ -59,5 +59,6 @@ async function main() {
 - This is intentionally minimal right now: it writes the ENS `addr(node)` forward record and sets reverse resolution, then registers the agent in ERC-8004.
 - You’ll need Sepolia ETH for the transactions.
 - The human wallet must be able to manage the `veilsdk.eth` subnode (it should own/control `veilsdk.eth` on Sepolia).
+- **ENS reverse (L1 `ReverseRegistrar`):** `claimForAddr(agent, owner, resolver)` may only be sent by the **agent address** (or an approved controller). The SDK sends that tx from `agentSigner`. If the agent is a separate EOA, it needs a small amount of Sepolia ETH for that one transaction. Using the **same wallet** for human + agent avoids funding a second key (as the demo does).
 - The agent wallet needs to sign an EIP-712 proof for `setAgentWallet()` (no transaction required from the agent wallet itself).
 

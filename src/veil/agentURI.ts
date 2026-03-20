@@ -11,6 +11,20 @@ export type AgentURIInput = {
   humanWallet?: string;
 };
 
+function bytesToBase64(bytes: Uint8Array): string {
+  // Browser path
+  if (typeof btoa === "function") {
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  // Node fallback (kept for server-side SDK usage).
+  return Buffer.from(bytes).toString("base64");
+}
+
 export function createAgentURIDataURI(input: AgentURIInput): string {
   const payload: Record<string, unknown> = {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
@@ -26,8 +40,7 @@ export function createAgentURIDataURI(input: AgentURIInput): string {
 
   // ERC-8004 accepts base64-encoded JSON data URIs.
   const json = JSON.stringify(payload);
-  // Using Buffer keeps this compatible with Node-based SDK usage.
-  const b64 = Buffer.from(toUtf8Bytes(json)).toString("base64");
+  const b64 = bytesToBase64(toUtf8Bytes(json));
   return `data:application/json;base64,${b64}`;
 }
 

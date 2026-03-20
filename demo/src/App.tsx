@@ -9,6 +9,8 @@ declare global {
 }
 
 type StepGroupStatus = "idle" | "running" | "ok" | "error";
+const SEPOLIA_CHAIN_ID = 11155111;
+const SEPOLIA_CHAIN_HEX = "0xaa36a7";
 
 export default function App() {
   const [connected, setConnected] = useState(false);
@@ -28,16 +30,64 @@ export default function App() {
 
   const labelSanitized = useMemo(() => label.trim().toLowerCase(), [label]);
 
+  async function getCurrentChainId(): Promise<number> {
+    const currentChainHex = await window.ethereum.request({ method: "eth_chainId" });
+    return Number.parseInt(String(currentChainHex), 16);
+  }
+
+  async function switchToSepolia(): Promise<void> {
+    if (!window.ethereum) throw new Error("No MetaMask provider found in this browser.");
+
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: SEPOLIA_CHAIN_HEX }],
+      });
+    } catch (switchError: any) {
+      // 4902 means the chain has not been added to wallet yet.
+      if (switchError?.code === 4902) {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [
+            {
+              chainId: SEPOLIA_CHAIN_HEX,
+              chainName: "Sepolia",
+              nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 },
+              rpcUrls: ["https://rpc.sepolia.org"],
+              blockExplorerUrls: ["https://sepolia.etherscan.io"],
+            },
+          ],
+        });
+        return;
+      }
+      throw switchError;
+    }
+  }
+
   async function connectMetaMask() {
     setError(null);
     try {
       if (!window.ethereum) throw new Error("No MetaMask provider found in this browser.");
 
       await window.ethereum.request({ method: "eth_requestAccounts" });
+      // Auto-prompt network switch right after connect.
+      const chainId = await getCurrentChainId();
+      if (chainId !== SEPOLIA_CHAIN_ID) {
+        await switchToSepolia();
+      }
       setConnected(true);
     } catch (e: any) {
       setError(e?.message ?? String(e));
       setConnected(false);
+    }
+  }
+
+  async function onManualSwitchNetwork() {
+    setError(null);
+    try {
+      await switchToSepolia();
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
     }
   }
 
@@ -58,16 +108,23 @@ export default function App() {
       if (!window.ethereum) throw new Error("No MetaMask provider found in this browser.");
       if (!labelSanitized) throw new Error("Please enter an ENS label (example: myagent).");
 
+      // Fresh provider + signer each run — ethers v6 JsonRpcSigner must not be `.connect()`'d again.
       const provider = new ethers.BrowserProvider(window.ethereum);
       const humanSigner = await provider.getSigner();
+      const humanAddress = await humanSigner.getAddress();
 
-      const { chainId } = await provider.getNetwork();
-      if (chainId !== 11155111n) {
-        throw new Error(`Please switch MetaMask to Sepolia (chainId=11155111). Current: ${chainId}`);
+      const currentChainId = await getCurrentChainId();
+      if (currentChainId !== SEPOLIA_CHAIN_ID) {
+        throw new Error(
+          `Please switch MetaMask to Sepolia (chainId=${SEPOLIA_CHAIN_ID}). Current: ${currentChainId}`,
+        );
       }
 
-      const agentSigner = ethers.Wallet.createRandom().connect(provider);
-      const agentWallet = await agentSigner.getAddress();
+      // Use the same connected wallet as both "human" and "agent" so ReverseRegistrar.claimForAddr
+      // can run (it requires msg.sender === agent address) without funding a separate agent EOA.
+      // For a separate agent wallet, fund it with Sepolia ETH for the one reverse-claim tx.
+      const agentSigner = humanSigner;
+      const agentWallet = humanAddress;
       setAgentWalletAddress(agentWallet);
 
       const res = await registerAgentIdentity({
@@ -126,6 +183,9 @@ export default function App() {
       <div className="row">
         <button onClick={connectMetaMask} disabled={running || connected}>
           {connected ? "Wallet connected" : "Connect MetaMask"}
+        </button>
+        <button onClick={onManualSwitchNetwork} disabled={running}>
+          Switch to Sepolia
         </button>
 
         <div>
