@@ -10,6 +10,7 @@ import {
   type RegisterAgentIdentityStep,
 } from "../../src";
 import { LampContainer } from "./components/ui/lamp";
+import { GlowingEffect } from "./components/ui/glowing-effect";
 import { IdentityCard } from "./components/IdentityCard";
 import { LocusCard } from "./components/LocusCard";
 import { ExecutionCard } from "./components/ExecutionCard";
@@ -24,7 +25,7 @@ import {
 } from "./services/locus";
 import { truncAddr } from "./lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wallet, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Wallet, CheckCircle, XCircle, Loader2, Shield } from "lucide-react";
 
 // ────────────────────────────────────────────────────────────
 // Step / state types
@@ -364,14 +365,14 @@ export default function App() {
 
   return (
     <LampContainer className="bg-black">
-      <div className="w-full max-w-lg px-4">
+      <div className="w-full max-w-xl sm:max-w-2xl px-4">
         {/* Top bar: wallet badge + network warning */}
         <AnimatePresence>
           {address && appState !== "disconnected" && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center justify-end gap-2 mb-4"
+              className="flex items-center justify-end gap-2 mb-5"
             >
               {onWrongNetwork && (
                 <button
@@ -384,14 +385,14 @@ export default function App() {
               )}
               <button
                 onClick={openAccountModal}
-                className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1.5 hover:bg-white/[0.06] transition-colors"
+                className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-full px-3.5 py-1.5 hover:bg-white/[0.09] transition-colors"
               >
                 <div
                   className={`w-1.5 h-1.5 rounded-full ${
                     onWrongNetwork ? "bg-amber-400" : "bg-green-400"
                   }`}
                 />
-                <span className="text-xs text-slate-400 font-mono">
+                <span className="text-xs text-slate-300 font-mono">
                   {truncAddr(address)}
                 </span>
               </button>
@@ -399,159 +400,181 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Main glass card */}
-        <div className="relative bg-white/[0.03] backdrop-blur-2xl border border-blue-500/[0.15] rounded-2xl shadow-2xl shadow-blue-500/[0.06] overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/40 to-transparent" />
+        {/* Main unified card with glowing border — double-layer shell */}
+        <div className="relative rounded-[1.5rem] bg-black border-[0.75px] border-white/[0.10] p-2.5 sm:p-3 shadow-[0_0_60px_-10px_rgba(59,130,246,0.15)]">
+          {/* GlowingEffect lives in the gap between outer shell and inner card */}
+          <GlowingEffect
+            spread={40}
+            glow={true}
+            disabled={false}
+            proximity={64}
+            inactiveZone={0.01}
+            borderWidth={3}
+            movementDuration={1.5}
+          />
 
-          <div className="p-8 sm:p-10">
-            <AnimatePresence mode="wait">
-              {/* ─── Disconnected ─── */}
-              {appState === "disconnected" && (
-                <motion.div
-                  key="disconnected"
-                  {...fadeSlide}
-                  className="flex flex-col items-center text-center"
-                >
-                  <h1 className="text-5xl sm:text-6xl font-bold text-white tracking-tight mb-3">
-                    Veil
-                  </h1>
-                  <p className="text-slate-400 text-base sm:text-lg mb-10 max-w-xs leading-relaxed">
-                    Identity and spend control for autonomous agents
-                  </p>
-                  <motion.button
-                    onClick={openConnectModal}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold px-8 py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/30"
+          {/* Inner card — solid black, pops against the shell gap */}
+          <div className="relative rounded-xl border-[0.75px] border-white/[0.08] bg-black overflow-hidden">
+
+            <div className="relative p-8 sm:p-12">
+              <AnimatePresence mode="wait">
+                {/* ─── Disconnected ─── */}
+                {appState === "disconnected" && (
+                  <motion.div
+                    key="disconnected"
+                    {...fadeSlide}
+                    className="flex flex-col items-center text-center"
                   >
-                    <Wallet className="w-5 h-5" />
-                    Connect Wallet
-                  </motion.button>
-
-                  {error && <ErrorBanner message={error} />}
-                </motion.div>
-              )}
-
-              {/* ─── Ready ─── */}
-              {appState === "ready" && (
-                <motion.div
-                  key="ready"
-                  {...fadeSlide}
-                  className="flex flex-col"
-                >
-                  <h2 className="text-2xl font-semibold text-white mb-8 text-center">
-                    Register your agent
-                  </h2>
-
-                  <div className="mb-6">
-                    <label className="text-sm text-slate-500 mb-2 block font-medium">
-                      Agent name
-                    </label>
-                    <div className="flex items-center bg-white/[0.04] border border-white/[0.08] rounded-xl focus-within:border-blue-500/40 transition-colors">
-                      <input
-                        type="text"
-                        value={label}
-                        onChange={(e) => setLabel(e.target.value)}
-                        placeholder="myagent"
-                        className="flex-1 bg-transparent text-white text-lg px-4 py-3.5 outline-none placeholder:text-slate-700 font-mono"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && labelSanitized) onRegister();
-                        }}
-                      />
-                      <span className="text-slate-600 pr-4 text-sm font-mono">
-                        .veilsdk.eth
-                      </span>
-                    </div>
-                  </div>
-
-                  <motion.button
-                    onClick={onRegister}
-                    disabled={!labelSanitized || onWrongNetwork}
-                    whileHover={labelSanitized ? { scale: 1.02 } : {}}
-                    whileTap={labelSanitized ? { scale: 0.98 } : {}}
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/30 text-lg"
-                  >
-                    Register Agent
-                  </motion.button>
-                  {onWrongNetwork && (
-                    <p className="mt-3 text-center text-xs text-amber-400">
-                      Switch to Sepolia to continue.
+                    <h1 className="text-5xl sm:text-7xl font-extrabold text-white tracking-[-0.04em] mb-3">
+                      Veil
+                    </h1>
+                    <p className="text-slate-500 text-base sm:text-lg mb-12 max-w-sm leading-relaxed">
+                      Verified identity and spend control for AI agents — one function call.
                     </p>
-                  )}
+                    <motion.button
+                      onClick={openConnectModal}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold px-10 py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/25 text-lg"
+                    >
+                      <Wallet className="w-5 h-5" />
+                      Connect Wallet
+                    </motion.button>
 
-                  {error && <ErrorBanner message={error} />}
-                </motion.div>
-              )}
+                    {error && <ErrorBanner message={error} />}
+                  </motion.div>
+                )}
 
-              {/* ─── Registering ─── */}
-              {appState === "registering" && (
-                <motion.div key="registering" {...fadeSlide}>
-                  <h2 className="text-xl font-semibold text-white mb-1 text-center">
-                    Registering
-                  </h2>
-                  <p className="text-blue-400 font-mono text-center mb-8 text-sm">
-                    {labelSanitized}.veilsdk.eth
-                  </p>
+                {/* ─── Ready ─── */}
+                {appState === "ready" && (
+                  <motion.div
+                    key="ready"
+                    {...fadeSlide}
+                    className="flex flex-col"
+                  >
+                    {/* Header with icon */}
+                    <div className="flex flex-col items-center mb-8">
+                      <div className="w-fit rounded-lg border-[0.75px] border-white/[0.08] bg-white/[0.03] p-2.5 mb-4">
+                        <Shield className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-[-0.04em]">
+                        Register your agent
+                      </h2>
+                      <p className="text-slate-500 text-sm mt-2 max-w-xs text-center leading-relaxed">
+                        Give your AI agent a verified .eth name and on-chain identity passport
+                      </p>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    {steps.map((step, i) => (
-                      <motion.div
-                        key={step.key}
-                        initial={{ opacity: 0, x: -16 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{
-                          delay: i * 0.06,
-                          duration: 0.3,
-                          ease: "easeOut",
-                        }}
-                        className={`flex items-center justify-between py-3 px-4 rounded-xl transition-colors duration-300 ${
-                          step.status === "running"
-                            ? step.key === "locus_register"
-                              ? "bg-emerald-500/[0.06] border border-emerald-500/[0.12]"
-                              : "bg-blue-500/[0.06] border border-blue-500/[0.12]"
-                            : step.status === "ok"
-                              ? "bg-green-500/[0.04] border border-green-500/[0.08]"
-                              : step.status === "error"
-                                ? "bg-red-500/[0.06] border border-red-500/[0.12]"
-                                : "bg-white/[0.02] border border-transparent"
-                        }`}
-                      >
-                        <span
-                          className={`text-sm font-medium transition-colors duration-300 ${
-                            step.status === "idle"
-                              ? "text-slate-600"
-                              : step.status === "running"
-                                ? "text-white"
-                                : step.status === "ok"
-                                  ? "text-slate-300"
-                                  : "text-red-400"
+                    <div className="mb-8">
+                      <label className="text-sm text-slate-500 mb-2.5 block font-medium tracking-wide">
+                        Agent name
+                      </label>
+                      <div className="flex items-center bg-white/[0.03] border-[0.75px] border-white/[0.08] rounded-xl focus-within:border-blue-500/40 focus-within:bg-white/[0.05] transition-all duration-200">
+                        <input
+                          type="text"
+                          value={label}
+                          onChange={(e) => setLabel(e.target.value)}
+                          placeholder="myagent"
+                          className="flex-1 bg-transparent text-white text-lg px-5 py-4 outline-none placeholder:text-slate-700 font-mono"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && labelSanitized) onRegister();
+                          }}
+                        />
+                        <span className="text-slate-500 pr-5 text-sm font-mono font-medium">
+                          .veilsdk.eth
+                        </span>
+                      </div>
+                    </div>
+
+                    <motion.button
+                      onClick={onRegister}
+                      disabled={!labelSanitized || onWrongNetwork}
+                      whileHover={labelSanitized ? { scale: 1.02 } : {}}
+                      whileTap={labelSanitized ? { scale: 0.98 } : {}}
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/25 text-lg tracking-wide"
+                    >
+                      Register Agent
+                    </motion.button>
+                    {onWrongNetwork && (
+                      <p className="mt-4 text-center text-xs text-amber-400 font-medium">
+                        Switch to Sepolia to continue.
+                      </p>
+                    )}
+
+                    {error && <ErrorBanner message={error} />}
+                  </motion.div>
+                )}
+
+                {/* ─── Registering ─── */}
+                {appState === "registering" && (
+                  <motion.div key="registering" {...fadeSlide}>
+                    <h2 className="text-2xl font-bold text-white mb-1 text-center tracking-tight">
+                      Registering
+                    </h2>
+                    <p className="text-blue-400 font-mono text-center mb-8 text-base font-medium">
+                      {labelSanitized}.veilsdk.eth
+                    </p>
+
+                    <div className="space-y-2">
+                      {steps.map((step, i) => (
+                        <motion.div
+                          key={step.key}
+                          initial={{ opacity: 0, x: -16 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{
+                            delay: i * 0.06,
+                            duration: 0.3,
+                            ease: "easeOut",
+                          }}
+                          className={`flex items-center justify-between py-3.5 px-5 rounded-xl transition-colors duration-300 ${
+                            step.status === "running"
+                              ? step.key === "locus_register"
+                                ? "bg-emerald-500/[0.06] border-[0.75px] border-emerald-500/[0.12]"
+                                : "bg-blue-500/[0.06] border-[0.75px] border-blue-500/[0.12]"
+                              : step.status === "ok"
+                                ? "bg-white/[0.02] border-[0.75px] border-white/[0.06]"
+                                : step.status === "error"
+                                  ? "bg-red-500/[0.06] border-[0.75px] border-red-500/[0.12]"
+                                  : "bg-white/[0.015] border-[0.75px] border-white/[0.05]"
                           }`}
                         >
-                          {step.label}
-                        </span>
-                        <StepIcon status={step.status} />
-                      </motion.div>
-                    ))}
-                  </div>
+                          <span
+                            className={`text-sm font-medium transition-colors duration-300 ${
+                              step.status === "idle"
+                                ? "text-slate-500"
+                                : step.status === "running"
+                                  ? "text-white"
+                                  : step.status === "ok"
+                                    ? "text-slate-300"
+                                    : "text-red-400"
+                            }`}
+                          >
+                            {step.label}
+                          </span>
+                          <StepIcon status={step.status} />
+                        </motion.div>
+                      ))}
+                    </div>
 
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="mt-6"
-                    >
-                      <ErrorBanner message={error} />
-                      <button
-                        onClick={resetToReady}
-                        className="w-full mt-3 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-400 font-medium py-2.5 rounded-xl transition-colors text-sm"
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-6"
                       >
-                        Try Again
-                      </button>
-                    </motion.div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                        <ErrorBanner message={error} />
+                        <button
+                          onClick={resetToReady}
+                          className="w-full mt-3 bg-white/[0.03] hover:bg-white/[0.06] border-[0.75px] border-white/[0.08] text-slate-400 font-medium py-3 rounded-xl transition-colors text-sm"
+                        >
+                          Try Again
+                        </button>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </div>
@@ -580,7 +603,7 @@ function ErrorBanner({ message }: { message: string }) {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mt-5 p-4 bg-red-500/[0.06] border border-red-500/[0.15] rounded-xl text-red-400 text-sm text-left leading-relaxed break-words"
+      className="mt-5 p-4 bg-red-500/[0.04] border-[0.75px] border-red-500/[0.10] rounded-xl text-red-400 text-sm text-left leading-relaxed break-words"
     >
       {message}
     </motion.div>

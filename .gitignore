@@ -4,9 +4,11 @@ node_modules/
 # Build output
 dist/
 
-# Local env / secrets
+# Local env / secrets (allow example templates)
 .env
 .env.*
+!.env.example
+!**/.env.example
 
 # Logs
 npm-debug.log*
@@ -17,18 +19,31 @@ pnpm-debug.log*
 
 # OS / editor
 .DS_Store
+Thumbs.db
 .vscode/
 .idea/
 .fleet/
+
+# Tooling / caches
+*.tsbuildinfo
+coverage/
+.turbo/
+.cache/
+
+# Local AI / editor state (keep out of repo)
+.cursor/
+.claude/
 
 # Local scratch JSON artifacts (keep package/tsconfig tracked)
 moltbook_*.json
 transfer*.json
 register.json
+locus_*.json
+update_tracks.json
+project.json
 
 # Ignore other root JSON artifacts by default
 /*.json
 !/package.json
 !/package-lock.json
 !/tsconfig.json
-
