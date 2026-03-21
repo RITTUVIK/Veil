@@ -527,8 +527,10 @@ export default function App() {
                             className="overflow-hidden"
                           >
                             <div className="pt-4">
-                              <label className="text-sm text-slate-500 mb-2 block font-medium tracking-wide">
-                                Use your own .eth domain
+                              <label className="text-sm mb-2 block">
+                                <span className="text-slate-500 font-medium tracking-wide">Use your own .eth domain</span>
+                                <br />
+                                <span className="text-xs text-slate-600 font-normal">Own a .eth name? Your agents will live under it instead.</span>
                               </label>
                               <input
                                 type="text"
@@ -538,7 +540,7 @@ export default function App() {
                                 className="w-full bg-white/[0.03] border-[0.75px] border-white/[0.08] rounded-xl text-white text-base px-5 py-3.5 outline-none placeholder:text-slate-700 font-mono focus:border-blue-500/40 focus:bg-white/[0.05] transition-all duration-200"
                               />
                               <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-                                Your agents will get a subdomain under it, like myagent.yourname.eth instead of myagent.veilsdk.eth
+                                Own a .eth name? Your agents will live under it. like myagent.yourname.eth instead of myagent.veilsdk.eth
                               </p>
                               {isCustomRoot && (
                                 <motion.div
