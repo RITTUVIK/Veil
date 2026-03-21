@@ -1,4 +1,4 @@
-import { ethers } from "ethers";
+import { ethers, ensNormalize } from "ethers";
 import { addressToReverseNode, labelhash, namehash } from "../ens/namehash";
 import { createAgentURIDataURI } from "./agentURI";
 
@@ -71,15 +71,20 @@ const DEFAULTS = {
   identityRegistryAddress: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
 } satisfies Record<string, string>;
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 const ENS_REGISTRY_ABI = [
   "function setSubnodeOwner(bytes32 node, bytes32 label, address owner) external",
   "function setResolver(bytes32 node, address resolver) external",
+  "function resolver(bytes32 node) view returns (address)",
   "function owner(bytes32 node) view returns (address)",
 ] as const;
 
 const PUBLIC_RESOLVER_ABI = [
   "function setAddr(bytes32 node, address addr) external",
   "function setName(bytes32 node, string newName) external",
+  "function addr(bytes32 node) view returns (address)",
+  "function name(bytes32 node) view returns (string)",
 ] as const;
 
 const REVERSE_REGISTRAR_ABI = [
@@ -90,14 +95,22 @@ const REVERSE_REGISTRAR_ABI = [
 const ERC8004_IDENTITY_REGISTRY_ABI = [
   "function register(string agentURI) external returns (uint256 agentId)",
   "function setAgentWallet(uint256 agentId, address newWallet, uint256 deadline, bytes signature) external",
+  "function agentWallet(uint256 agentId) view returns (address)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
   "event Registered(uint256 indexed agentId, string agentURI, address indexed owner)",
 ] as const;
 
-function assertLabel(label: string) {
-  const cleaned = label.trim();
-  if (!cleaned) throw new Error("label is required");
-  // Keep it simple: ENS labels are limited; for a demo, reject whitespace and dots.
-  if (cleaned.includes(".") || /\s/.test(cleaned)) throw new Error(`Invalid label: "${label}"`);
+/**
+ * Normalizes an ENS label using ENSIP-15 (UTS-46) via ethers v6's ensNormalize.
+ * Throws on invalid labels (emoji-only, illegal chars, confusables, etc.).
+ * Returns the normalized label ready for on-chain use.
+ */
+function normalizeLabel(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) throw new Error("label is required");
+  // ensNormalize handles full ENSIP-15 validation: lowercasing, UTS-46 mapping,
+  // confusable rejection, zero-width char removal, etc. Throws on invalid input.
+  return ensNormalize(trimmed);
 }
 
 function normalizeAddress(addr: string): string {
@@ -121,7 +134,8 @@ function withProvider(signer: ethers.Signer, provider: ethers.Provider): ethers.
 export async function registerAgentIdentity(
   params: RegisterAgentIdentityParams,
 ): Promise<RegisterAgentIdentityResult> {
-  assertLabel(params.label);
+  // Fix 1: Full ENSIP-15 normalization instead of basic validation.
+  const normalizedLabel = normalizeLabel(params.label);
 
   const rootName = params.rootName ?? DEFAULTS.rootName;
 
@@ -136,7 +150,7 @@ export async function registerAgentIdentity(
     );
   }
 
-  const agentEnsName = `${params.label.toLowerCase()}.${rootName}`;
+  const agentEnsName = `${normalizedLabel}.${rootName}`;
 
   const ensRegistryAddress = params.ensRegistryAddress ?? DEFAULTS.ensRegistryAddress;
   const publicResolverAddress = params.publicResolverAddress ?? DEFAULTS.publicResolverAddress;
@@ -161,7 +175,7 @@ export async function registerAgentIdentity(
   );
 
   const parentNode = namehash(rootName);
-  const labelHash = labelhash(params.label);
+  const labelHash = labelhash(normalizedLabel);
   const agentNode = namehash(agentEnsName);
   const reverseNode = addressToReverseNode(agentWalletAddress);
 
@@ -182,129 +196,209 @@ export async function registerAgentIdentity(
     );
   }
 
-  // 1) ENS: veilsdk.eth -> myagent.veilsdk.eth
-  const tx1 = await ensRegistry.setSubnodeOwner(parentNode, labelHash, humanAddress);
-  txHashes.ensSetSubnodeOwner = tx1.hash;
-  await tx1.wait();
-  params.onStep?.("ens_subnodeOwner", tx1.hash);
-
-  // 2) ENS: attach resolver
-  const tx2 = await ensRegistry.setResolver(agentNode, publicResolverAddress);
-  txHashes.ensSetResolver = tx2.hash;
-  await tx2.wait();
-  params.onStep?.("ens_setResolver", tx2.hash);
-
-  // 3) ENS: point addr(myagent.veilsdk.eth) to agent wallet
-  const tx3 = await publicResolver.setAddr(agentNode, agentWalletAddress);
-  txHashes.ensSetAddr = tx3.hash;
-  await tx3.wait();
-  params.onStep?.("ens_setAddr", tx3.hash);
-
-  // 4) Reverse resolution: agentWallet -> myagent.veilsdk.eth
-  // claimForAddr must be sent *from the agent wallet* (see ReverseRegistrar.authorised(addr)).
-  // It sets the reverse node's owner to the human, who then sets the name on the resolver.
-  const agentBal = await params.provider.getBalance(agentWalletAddress);
-  if (agentBal === 0n) {
-    throw new Error(
-      [
-        "The agent wallet needs a small amount of native ETH (Sepolia ETH) to submit ENS reverse setup.",
-        "ReverseRegistrar.claimForAddr(...) must be called with msg.sender equal to the agent address.",
-        `Agent address: ${agentWalletAddress}`,
-        "Fund that address with test ETH, or use the same wallet as both human and agent (demo default).",
-      ].join("\n"),
-    );
+  // ── Step 1: ENS subdomain ────────────────────────────────
+  // Idempotency: skip if the subdomain already has an owner.
+  const existingSubnodeOwner: string = await ensRegistry.owner(agentNode);
+  if (existingSubnodeOwner !== ZERO_ADDRESS) {
+    params.onStep?.("ens_subnodeOwner");
+  } else {
+    const tx1 = await ensRegistry.setSubnodeOwner(parentNode, labelHash, humanAddress);
+    txHashes.ensSetSubnodeOwner = tx1.hash;
+    await tx1.wait();
+    params.onStep?.("ens_subnodeOwner", tx1.hash);
   }
 
-  const tx4 = await reverseRegistrarAsAgent.claimForAddr(
-    agentWalletAddress,
-    humanAddress,
-    publicResolverAddress,
-  );
-  txHashes.reverseClaimForAddr = tx4.hash;
-  await tx4.wait();
-  params.onStep?.("ens_reverseClaim", tx4.hash);
+  // ── Step 2: Attach resolver ──────────────────────────────
+  // Idempotency: skip if the resolver is already set correctly.
+  const existingResolver: string = await ensRegistry.resolver(agentNode);
+  if (existingResolver.toLowerCase() === publicResolverAddress.toLowerCase()) {
+    params.onStep?.("ens_setResolver");
+  } else {
+    const tx2 = await ensRegistry.setResolver(agentNode, publicResolverAddress);
+    txHashes.ensSetResolver = tx2.hash;
+    await tx2.wait();
+    params.onStep?.("ens_setResolver", tx2.hash);
+  }
 
-  const tx5 = await publicResolver.setName(reverseNode, agentEnsName);
-  txHashes.reverseSetName = tx5.hash;
-  await tx5.wait();
-  params.onStep?.("ens_reverseSetName", tx5.hash);
+  // ── Step 3: Point addr to agent wallet ───────────────────
+  // Idempotency: skip if addr(node) already returns the correct agent wallet.
+  const existingAddr: string = await publicResolver.addr(agentNode);
+  if (existingAddr.toLowerCase() === agentWalletAddress.toLowerCase()) {
+    params.onStep?.("ens_setAddr");
+  } else {
+    const tx3 = await publicResolver.setAddr(agentNode, agentWalletAddress);
+    txHashes.ensSetAddr = tx3.hash;
+    await tx3.wait();
+    params.onStep?.("ens_setAddr", tx3.hash);
+  }
 
-  // 5) ERC-8004: mint identity to the human owner, linking via agentURI.
-  const agentURI = createAgentURIDataURI({
-    agentName: agentEnsName,
-    ensName: agentEnsName,
-    agentWallet: agentWalletAddress,
-    humanWallet: humanAddress,
-    description: params.agentDescription,
-    image: params.agentImage,
-  });
+  // ── Step 4: Reverse claim ────────────────────────────────
+  // Idempotency: skip if the reverse record owner is already set.
+  const reverseOwner: string = await ensRegistry.owner(reverseNode);
+  if (reverseOwner !== ZERO_ADDRESS) {
+    params.onStep?.("ens_reverseClaim");
+  } else {
+    // claimForAddr must be sent *from the agent wallet* (see ReverseRegistrar.authorised(addr)).
+    const agentBal = await params.provider.getBalance(agentWalletAddress);
+    if (agentBal === 0n) {
+      throw new Error(
+        [
+          "The agent wallet needs a small amount of native ETH (Sepolia ETH) to submit ENS reverse setup.",
+          "ReverseRegistrar.claimForAddr(...) must be called with msg.sender equal to the agent address.",
+          `Agent address: ${agentWalletAddress}`,
+          "Fund that address with test ETH, or use the same wallet as both human and agent (demo default).",
+        ].join("\n"),
+      );
+    }
 
-  const tx6 = await identityRegistry.register(agentURI);
-  txHashes.erc8004Register = tx6.hash;
-  const receipt6 = await tx6.wait();
-  params.onStep?.("erc8004_register", tx6.hash);
+    const tx4 = await reverseRegistrarAsAgent.claimForAddr(
+      agentWalletAddress,
+      humanAddress,
+      publicResolverAddress,
+    );
+    txHashes.reverseClaimForAddr = tx4.hash;
+    await tx4.wait();
+    params.onStep?.("ens_reverseClaim", tx4.hash);
+  }
 
-  // ERC-8004 register emits `Registered(agentId, agentURI, owner)`.
-  // We need agentId to call `setAgentWallet`.
-  const registeredLog = receipt6.logs
-    .map((l: ethers.Log) => {
-      try {
-        return identityRegistry.interface.parseLog(l) as ethers.LogDescription;
-      } catch {
-        return null as ethers.LogDescription | null;
+  // ── Step 5: Set reverse name ─────────────────────────────
+  // Idempotency: skip if name(reverseNode) already returns the correct ENS name.
+  let existingReverseName = "";
+  try {
+    existingReverseName = await publicResolver.name(reverseNode);
+  } catch {
+    // Resolver may not have a name record yet — that's fine, we'll set it.
+  }
+  if (existingReverseName === agentEnsName) {
+    params.onStep?.("ens_reverseSetName");
+  } else {
+    const tx5 = await publicResolver.setName(reverseNode, agentEnsName);
+    txHashes.reverseSetName = tx5.hash;
+    await tx5.wait();
+    params.onStep?.("ens_reverseSetName", tx5.hash);
+  }
+
+  // ── Step 6: ERC-8004 register ────────────────────────────
+  // Idempotency: check if the human already owns an identity whose agentWallet
+  // matches agentWalletAddress. We scan recent Registered events for this owner.
+  let agentId: bigint | null = null;
+
+  const registeredFilter = identityRegistry.filters.Registered(null, null, humanAddress);
+  const existingLogs = await identityRegistry.queryFilter(registeredFilter);
+  for (const log of existingLogs) {
+    const parsed = identityRegistry.interface.parseLog(log);
+    if (!parsed) continue;
+    const id = parsed.args.agentId as bigint;
+    try {
+      const existingWallet: string = await identityRegistry.agentWallet(id);
+      if (existingWallet.toLowerCase() === agentWalletAddress.toLowerCase()) {
+        agentId = id;
+        break;
       }
-    })
-    .find(
-      (parsed: ethers.LogDescription | null): parsed is ethers.LogDescription =>
-        parsed !== null && parsed.name === "Registered",
-    );
-
-  if (!registeredLog) {
-    throw new Error("ERC-8004 Registered event not found in receipt logs.");
+      // Also match if the agentWallet hasn't been set yet (zero address) — the
+      // human registered it but step 7 didn't complete. We can still claim it.
+      if (existingWallet === ZERO_ADDRESS) {
+        const owner: string = await identityRegistry.ownerOf(id);
+        if (owner.toLowerCase() === humanAddress.toLowerCase()) {
+          agentId = id;
+          break;
+        }
+      }
+    } catch {
+      // agentWallet view may revert for non-existent ids; skip.
+    }
   }
 
-  const agentId = registeredLog.args.agentId as bigint;
+  if (agentId !== null) {
+    params.onStep?.("erc8004_register");
+  } else {
+    const agentURI = createAgentURIDataURI({
+      agentName: agentEnsName,
+      ensName: agentEnsName,
+      agentWallet: agentWalletAddress,
+      humanWallet: humanAddress,
+      description: params.agentDescription,
+      image: params.agentImage,
+    });
 
-  // 6) ERC-8004: link reserved `agentWallet` using EIP-712 signature from agent wallet.
-  const { chainId } = await params.provider.getNetwork();
-  const chainIdNumber = Number(chainId);
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + 280); // keep within contract's max deadline delay
+    const tx6 = await identityRegistry.register(agentURI);
+    txHashes.erc8004Register = tx6.hash;
+    const receipt6 = await tx6.wait();
+    params.onStep?.("erc8004_register", tx6.hash);
 
-  // Must match IdentityRegistryUpgradeable:
-  //   __EIP712_init("ERC8004IdentityRegistry", "1")
-  //   AGENT_WALLET_SET_TYPEHASH = keccak256("AgentWalletSet(uint256 agentId,address newWallet,address owner,uint256 deadline)")
-  const domain = {
-    name: "ERC8004IdentityRegistry",
-    version: "1",
-    chainId: chainIdNumber,
-    verifyingContract: identityRegistryAddress,
-  };
+    // ERC-8004 register emits `Registered(agentId, agentURI, owner)`.
+    const registeredLog = receipt6.logs
+      .map((l: ethers.Log) => {
+        try {
+          return identityRegistry.interface.parseLog(l) as ethers.LogDescription;
+        } catch {
+          return null as ethers.LogDescription | null;
+        }
+      })
+      .find(
+        (parsed: ethers.LogDescription | null): parsed is ethers.LogDescription =>
+          parsed !== null && parsed.name === "Registered",
+      );
 
-  const types: Record<string, ethers.TypedDataField[]> = {
-    AgentWalletSet: [
-      { name: "agentId", type: "uint256" },
-      { name: "newWallet", type: "address" },
-      { name: "owner", type: "address" },
-      { name: "deadline", type: "uint256" },
-    ],
-  };
+    if (!registeredLog) {
+      throw new Error("ERC-8004 Registered event not found in receipt logs.");
+    }
 
-  const value = {
-    agentId,
-    newWallet: agentWalletAddress,
-    owner: humanAddress,
-    deadline,
-  };
+    agentId = registeredLog.args.agentId as bigint;
+  }
 
-  const signature = await agentSigner.signTypedData(domain, types, value);
-  const tx7 = await identityRegistry.setAgentWallet(agentId, agentWalletAddress, deadline, signature);
-  txHashes.erc8004SetAgentWallet = tx7.hash;
-  await tx7.wait();
-  params.onStep?.("erc8004_setAgentWallet", tx7.hash);
+  // ── Step 7: Link agent wallet via EIP-712 ────────────────
+  // Idempotency: skip if agentWallet is already set correctly.
+  let currentAgentWallet = ZERO_ADDRESS;
+  try {
+    currentAgentWallet = await identityRegistry.agentWallet(agentId);
+  } catch {
+    // View may revert if not set; treat as zero.
+  }
+
+  if (currentAgentWallet.toLowerCase() === agentWalletAddress.toLowerCase()) {
+    params.onStep?.("erc8004_setAgentWallet");
+  } else {
+    const { chainId } = await params.provider.getNetwork();
+    const chainIdNumber = Number(chainId);
+    // Fix 2: 15-minute deadline instead of 280 seconds.
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 900);
+
+    // Must match IdentityRegistryUpgradeable:
+    //   __EIP712_init("ERC8004IdentityRegistry", "1")
+    //   AGENT_WALLET_SET_TYPEHASH = keccak256("AgentWalletSet(uint256 agentId,address newWallet,address owner,uint256 deadline)")
+    const domain = {
+      name: "ERC8004IdentityRegistry",
+      version: "1",
+      chainId: chainIdNumber,
+      verifyingContract: identityRegistryAddress,
+    };
+
+    const types: Record<string, ethers.TypedDataField[]> = {
+      AgentWalletSet: [
+        { name: "agentId", type: "uint256" },
+        { name: "newWallet", type: "address" },
+        { name: "owner", type: "address" },
+        { name: "deadline", type: "uint256" },
+      ],
+    };
+
+    const value = {
+      agentId,
+      newWallet: agentWalletAddress,
+      owner: humanAddress,
+      deadline,
+    };
+
+    const signature = await agentSigner.signTypedData(domain, types, value);
+    const tx7 = await identityRegistry.setAgentWallet(agentId, agentWalletAddress, deadline, signature);
+    txHashes.erc8004SetAgentWallet = tx7.hash;
+    await tx7.wait();
+    params.onStep?.("erc8004_setAgentWallet", tx7.hash);
+  }
 
   return {
     agentEnsName,
     txHashes,
   };
 }
-
