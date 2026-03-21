@@ -1,14 +1,30 @@
-# Veil — Identity Infrastructure for AI Agents
+# Veil
 
-AI agents are anonymous. When an agent takes an action, makes a payment, or talks to another agent — nobody knows who it is, who built it, or whether it can be trusted.
+Identity infrastructure for AI agents.
 
-Veil fixes the identity side with **one SDK call**: your agent gets a `.eth` name, an ERC-8004 passport, and an on-chain link between the agent wallet and the human who owns the parent ENS name.
+AI agents are anonymous. When an agent takes an action, makes a payment, or communicates with another agent, there is no way to know who built it, who is accountable for it, or whether it can be trusted.
 
-The **demo app** goes one step further and wires **Locus** (Base) so you can show **USDC spend controls** next to that identity — budget tiers, approvals, and a send flow (simulated or against a real API if you configure it).
+Veil solves the identity side with a single SDK call. Your agent gets a `.eth` name, an ERC-8004 on-chain passport, and a cryptographic link between the agent wallet and the human who controls the parent ENS domain.
 
 ---
 
-## How it works (SDK)
+## What it does
+
+`registerAgentIdentity()` executes seven on-chain steps against Sepolia by default:
+
+1. Create `myagent.veilsdk.eth` as a subdomain under the root ENS name
+2. Attach the public resolver to the name
+3. Set the name's `addr` record to the agent wallet address
+4. Claim the reverse record for the agent address (sent from the agent wallet)
+5. Set the reverse name so the agent wallet resolves back to the ENS name
+6. Register the agent in the ERC-8004 Identity Registry
+7. Link the agent wallet via `setAgentWallet` using an EIP-712 signature from the agent key
+
+The result is an agent with a human-readable name, a verifiable on-chain passport, and a provable connection to its owner — all in one call.
+
+---
+
+## SDK usage
 
 ```ts
 import { ethers } from "ethers";
@@ -16,73 +32,32 @@ import { registerAgentIdentity } from "veil";
 
 const result = await registerAgentIdentity({
   provider,
-  humanSigner, // must own `veilsdk.eth` (or your `rootName`) on this network
-  agentSigner, // must match `agentWalletAddress`; signs reverse claim + EIP-712 for ERC-8004
+  humanSigner,        // must own the root ENS name on this network
+  agentSigner,        // must match agentWalletAddress; signs the reverse claim and EIP-712
   agentWalletAddress: "0xYourAgentAddress",
   label: "myagent",
+  rootName: "veilsdk.eth", // optional, defaults to veilsdk.eth
 });
 
-console.log(result.agentEnsName); // e.g. myagent.veilsdk.eth
-console.log(result.txHashes); // proof: 7 Ethereum txs (ENS + ERC-8004)
+console.log(result.agentEnsName); // myagent.veilsdk.eth
+console.log(result.txHashes);     // seven Ethereum transaction hashes
 ```
 
-**`registerAgentIdentity()`** performs **7 on-chain steps** (Sepolia by default):
-
-1. Create `myagent.veilsdk.eth` as a subdomain under `veilsdk.eth`
-2. Attach the public resolver to the name
-3. Set the name’s `addr` to the agent wallet
-4. Reverse claim for the agent address (`claimForAddr` — **must be sent as the agent**)
-5. Set reverse name (wallet → ENS)
-6. Register the agent in the **ERC-8004 Identity Registry**
-7. Link the agent wallet with **`setAgentWallet`** using an **EIP-712** signature from the agent key
-
-> **Note:** The agent wallet needs enough Sepolia ETH to pay for its txs (especially the reverse claim). The demo often uses the **same** connected wallet for human + agent so you don’t fund a second key; the SDK still supports a **separate** agent key if you fund it.
+All steps are idempotent. If a step has already been completed on a previous run, it is skipped and the function continues from where it left off.
 
 ---
 
-## Locus (demo only — step 8)
+## Custom root domain
 
-The **npm package `veil`** does not call Locus. After identity registration succeeds, the **React demo** calls `registerLocusAgent()` so judges can see:
-
-- A **Locus-facing** agent record and spend UI (see `demo/src/services/locus.ts`)
-- **Wallet status + policy** in the UI — today those are still **simulated** unless you wire real endpoints; **register** and **pay/send** can hit your API when `VITE_LOCUS_API_URL` is set
-
-So: **7 txs = SDK**; **“step 8” = demo integration** (Locus on Base, USDC story).
+By default agents are registered under `veilsdk.eth`. If you own a `.eth` name on Sepolia you can pass it as `rootName` and your agents will be registered under your domain instead. The demo UI exposes this as an optional input in the Advanced section.
 
 ---
 
-## The full agent story (demo)
+## Demo app
 
-| Layer | What it gives your agent | Where |
-| --- | --- | --- |
-| ENS | Human-readable username | Ethereum (Sepolia in the demo) |
-| ERC-8004 | On-chain passport + agent wallet link | Ethereum (Sepolia) |
-| Locus | USDC spend rules + send flow in the UI | Base (product); demo uses adapter + sim or API |
+The demo is a React app built with RainbowKit and wagmi. It walks through the full registration flow and then shows an agent dashboard with identity details, an ENS name, and a Locus spend wallet.
 
-ENS + ERC-8004 answer **who the agent is**. Locus (in the demo) illustrates **how it could spend under policy**.
-
----
-
-## Spend controls via Locus (demo behavior)
-
-With the demo’s policy model you get tiers such as:
-
-- **Auto** — under the approval threshold (sim / client preflight)
-- **Pending approval** — over threshold → approval URL (sim) or API `202` shape
-- **Blocked** — over max per-tx or remaining budget
-
-Exact numbers come from **simulation defaults** or your **live API** responses once wired; policy is not edited from this repo’s SDK.
-
----
-
-## Demo
-
-1. Connect a wallet on **Sepolia** (demo uses **RainbowKit + wagmi**; MetaMask works)
-2. Enter an agent label (e.g. `myagent`)
-3. Watch **7** identity steps + **1** Locus setup step, with Sepolia tx hashes where applicable
-4. Open the **dashboard**: identity summary + **Locus** spend card + **Send USDC** panel
-
-### Run locally
+**To run locally:**
 
 ```bash
 cd demo
@@ -90,67 +65,76 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173` and connect a wallet on Sepolia.
 
-**Optional — real Locus API (register + send):**
+After the seven identity steps complete, the demo registers the agent with Locus and displays a spend controls dashboard showing wallet status, policy tiers, and a USDC send form.
+
+**Optional: connect a live Locus API**
 
 ```bash
 # demo/.env
 VITE_LOCUS_API_URL=https://beta-api.paywithlocus.com
 ```
 
-Without it, Locus runs in **simulation** (delays + fixed policy). Wallet/policy snapshots in the adapter are still mostly **sim** until real endpoints exist — see TODOs in `demo/src/services/locus.ts`.
-
-### SDK install (library consumers)
-
-From the repo root (after `npm run build`):
-
-```bash
-npm install
-npm run build
-```
-
-Publish or `npm link` as package name **`veil`** (see root `package.json`).
+Without this variable, Locus runs in simulation mode with fixed policy values. The registration and send steps still execute against the interface; they return simulated responses rather than hitting live endpoints.
 
 ---
 
-## Repo structure
+## Architecture
 
 ```
-src/                          TypeScript SDK (`veil`)
-  veil/                       registerAgentIdentity(), agent URI helpers
-  ens/                        ENS helpers (namehash, labelhash)
-demo/                         React demo (RainbowKit / wagmi)
+src/                          TypeScript SDK (package name: veil)
+  veil/                       registerAgentIdentity, agent URI helpers
+  ens/                        namehash, labelhash utilities
+demo/                         React demo app
   src/
-    wagmi.ts                  chain + wallet config
-    lib/ethersAdapter.ts      wagmi wallet client → ethers signer
-    services/locus.ts         Locus adapter (sim + partial live API)
-    components/LocusCard.tsx  Spend controls UI
-    components/ExecutionCard.tsx  USDC send form
-    App.tsx                   Identity + Locus flow
+    wagmi.ts                  chain and wallet configuration
+    lib/ethersAdapter.ts      converts wagmi WalletClient to ethers signer
+    services/locus.ts         Locus adapter with simulation and live API support
+    components/               IdentityCard, LocusCard, ExecutionCard
+    App.tsx                   registration flow and dashboard
 ```
 
 ---
 
 ## Prerequisites
 
-- **Sepolia ETH** in the wallet(s) that will sign txs
-- Human wallet must **own `veilsdk.eth`** on Sepolia (or pass another `rootName` you control)
-- If the **agent wallet is a different address**, fund it with Sepolia ETH for the reverse-claim tx
+- Sepolia ETH in the wallet that will sign transactions
+- The human wallet must own the root ENS name on Sepolia (`veilsdk.eth` by default, or your own domain if using a custom root)
+- If the agent wallet is a separate address from the human wallet, it must be funded with enough Sepolia ETH to cover the reverse-claim transaction
+
+---
+
+## Network
+
+Everything runs on **Sepolia testnet**. No mainnet transactions are made.
+
+Contract addresses used by default:
+
+| Contract | Address |
+| --- | --- |
+| ENS Registry | `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e` |
+| ENS Public Resolver | `0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5` |
+| ENS Reverse Registrar | `0xA0a1AbcDAe1a2a4A2EF8e9113Ff0e02DD81DC0C6` |
+| ERC-8004 Identity Registry | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
+
+All addresses can be overridden via SDK parameters if you need to point at a different deployment.
 
 ---
 
 ## Built for
 
-- ENS Identity — Synthesis Hackathon 2026
-- ENS Communication — Synthesis Hackathon 2026
-- ENS Open Integration — Synthesis Hackathon 2026
-- Best Use of Locus — Synthesis Hackathon 2026
+Synthesis Hackathon 2026
+
+- ENS Identity
+- ENS Communication
+- ENS Open Integration
+- Best Use of Locus
 
 ---
 
 ## Why Veil
 
-Agents need identity for the same reasons humans do — so others know who they are, someone stays accountable, and trust doesn’t require a central gatekeeper.
+Agents need identity for the same reason humans do. So others know who they are, someone stays accountable, and trust does not require a central authority.
 
-**ENS** is the username. **ERC-8004** is the passport. **Veil** connects them in one place. **Locus** (in the demo) shows how that identity can sit next to **controlled spending** on Base.
+ENS is the username. ERC-8004 is the passport. Veil connects them in one call.
