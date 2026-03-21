@@ -25,7 +25,7 @@ import {
 } from "./services/locus";
 import { truncAddr } from "./lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wallet, CheckCircle, XCircle, Loader2, Shield, ChevronDown, AlertTriangle } from "lucide-react";
+import { Wallet, CheckCircle, XCircle, Loader2, ChevronDown, AlertTriangle } from "lucide-react";
 
 // ────────────────────────────────────────────────────────────
 // Step / state types
@@ -439,7 +439,7 @@ export default function App() {
                       Veil
                     </h1>
                     <p className="text-slate-500 text-base sm:text-lg mb-12 max-w-sm leading-relaxed">
-                      Verified identity and spend control for AI agents — one function call.
+                      Give your AI agent a name, a passport, and a wallet. All in one call.
                     </p>
                     <motion.button
                       onClick={openConnectModal}
@@ -462,11 +462,13 @@ export default function App() {
                     {...fadeSlide}
                     className="flex flex-col"
                   >
-                    {/* Header with icon */}
+                    {/* Header with logo */}
                     <div className="flex flex-col items-center mb-8">
-                      <div className="w-fit rounded-lg border-[0.75px] border-white/[0.08] bg-white/[0.03] p-2.5 mb-4">
-                        <Shield className="w-5 h-5 text-blue-400" />
-                      </div>
+                      <img
+                        src="/veil-logo.png"
+                        alt="Veil"
+                        className="w-36 h-36 -mt-4 object-contain mb-2 drop-shadow-[0_0_12px_rgba(59,130,246,0.3)]"
+                      />
                       <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-[-0.04em]">
                         Register your agent
                       </h2>
@@ -494,11 +496,12 @@ export default function App() {
                           .{effectiveRoot}
                         </span>
                       </div>
-                      {labelSanitized && (
-                        <p className="mt-2 text-xs text-slate-600 font-mono">
-                          {labelSanitized}.{effectiveRoot}
-                        </p>
-                      )}
+                      <p className="mt-2 text-xs text-slate-600">
+                        Your agent will be registered as:{" "}
+                        <span className="font-mono text-slate-500">
+                          {labelSanitized || "<name>"}.{effectiveRoot}
+                        </span>
+                      </p>
                     </div>
 
                     {/* Advanced: custom root domain */}
@@ -525,17 +528,17 @@ export default function App() {
                           >
                             <div className="pt-4">
                               <label className="text-sm text-slate-500 mb-2 block font-medium tracking-wide">
-                                Root ENS domain (optional)
+                                Use your own .eth domain
                               </label>
                               <input
                                 type="text"
                                 value={rootName}
                                 onChange={(e) => setRootName(e.target.value)}
-                                placeholder="veilsdk.eth"
+                                placeholder="yourname.eth"
                                 className="w-full bg-white/[0.03] border-[0.75px] border-white/[0.08] rounded-xl text-white text-base px-5 py-3.5 outline-none placeholder:text-slate-700 font-mono focus:border-blue-500/40 focus:bg-white/[0.05] transition-all duration-200"
                               />
                               <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-                                Leave empty to register under veilsdk.eth. Enter your own .eth name to register agents under your domain.
+                                Your agents will get a subdomain under it, like myagent.yourname.eth instead of myagent.veilsdk.eth
                               </p>
                               {isCustomRoot && (
                                 <motion.div
