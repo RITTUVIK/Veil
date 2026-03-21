@@ -123,6 +123,7 @@ src/                          TypeScript SDK (`veil`)
 demo/                         React demo (RainbowKit / wagmi)
   src/
     wagmi.ts                  chain + wallet config
+    lib/ethersAdapter.ts      wagmi wallet client → ethers signer
     services/locus.ts         Locus adapter (sim + partial live API)
     components/LocusCard.tsx  Spend controls UI
     components/ExecutionCard.tsx  USDC send form
