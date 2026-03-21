@@ -25,7 +25,7 @@ import {
 } from "./services/locus";
 import { truncAddr } from "./lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wallet, CheckCircle, XCircle, Loader2, Shield } from "lucide-react";
+import { Wallet, CheckCircle, XCircle, Loader2, Shield, ChevronDown, AlertTriangle } from "lucide-react";
 
 // ────────────────────────────────────────────────────────────
 // Step / state types
@@ -75,6 +75,8 @@ export default function App() {
   const requestIdRef = useRef(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [label, setLabel] = useState("");
+  const [rootName, setRootName] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agentWalletAddress, setAgentWalletAddress] = useState<string | null>(null);
   const [result, setResult] = useState<null | {
@@ -91,6 +93,11 @@ export default function App() {
   const [locusPolicy, setLocusPolicy] = useState<LocusPolicySnapshot | null>(null);
 
   const labelSanitized = useMemo(() => label.trim().toLowerCase(), [label]);
+  const effectiveRoot = useMemo(() => {
+    const trimmed = rootName.trim().toLowerCase();
+    return trimmed || "veilsdk.eth";
+  }, [rootName]);
+  const isCustomRoot = rootName.trim().length > 0;
 
   // Derive display state from connection + phase
   const appState = !isConnected
@@ -169,6 +176,7 @@ export default function App() {
         agentSigner,
         agentWalletAddress: agentWallet,
         label: labelSanitized,
+        rootName: effectiveRoot,
         onStep: (step: RegisterAgentIdentityStep, txHash?: string) => {
           if (requestIdRef.current !== requestId) return;
           setSteps((prev) =>
@@ -248,6 +256,8 @@ export default function App() {
     setError(null);
     setResult(null);
     setLabel("");
+    setRootName("");
+    setShowAdvanced(false);
     setSteps(ALL_STEPS.map((s) => ({ ...s, status: "idle" })));
     setLocusAgent(null);
     setLocusWallet(null);
@@ -465,7 +475,7 @@ export default function App() {
                       </p>
                     </div>
 
-                    <div className="mb-8">
+                    <div className="mb-6">
                       <label className="text-sm text-slate-500 mb-2.5 block font-medium tracking-wide">
                         Agent name
                       </label>
@@ -481,9 +491,68 @@ export default function App() {
                           }}
                         />
                         <span className="text-slate-500 pr-5 text-sm font-mono font-medium">
-                          .veilsdk.eth
+                          .{effectiveRoot}
                         </span>
                       </div>
+                      {labelSanitized && (
+                        <p className="mt-2 text-xs text-slate-600 font-mono">
+                          {labelSanitized}.{effectiveRoot}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Advanced: custom root domain */}
+                    <div className="mb-8">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvanced((v) => !v)}
+                        className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-400 transition-colors font-medium"
+                      >
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 transition-transform duration-200 ${showAdvanced ? "rotate-180" : ""}`}
+                        />
+                        Advanced
+                      </button>
+
+                      <AnimatePresence>
+                        {showAdvanced && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            className="overflow-hidden"
+                          >
+                            <div className="pt-4">
+                              <label className="text-sm text-slate-500 mb-2 block font-medium tracking-wide">
+                                Root ENS domain (optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={rootName}
+                                onChange={(e) => setRootName(e.target.value)}
+                                placeholder="veilsdk.eth"
+                                className="w-full bg-white/[0.03] border-[0.75px] border-white/[0.08] rounded-xl text-white text-base px-5 py-3.5 outline-none placeholder:text-slate-700 font-mono focus:border-blue-500/40 focus:bg-white/[0.05] transition-all duration-200"
+                              />
+                              <p className="mt-2 text-xs text-slate-600 leading-relaxed">
+                                Leave empty to register under veilsdk.eth. Enter your own .eth name to register agents under your domain.
+                              </p>
+                              {isCustomRoot && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="flex items-start gap-2 mt-3 p-3 bg-amber-500/[0.06] border-[0.75px] border-amber-500/[0.15] rounded-lg"
+                                >
+                                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                                  <p className="text-xs text-amber-400 leading-relaxed">
+                                    Make sure your wallet owns <span className="font-mono font-medium">{effectiveRoot}</span> on Sepolia or registration will fail.
+                                  </p>
+                                </motion.div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
                     <motion.button
@@ -512,7 +581,7 @@ export default function App() {
                       Registering
                     </h2>
                     <p className="text-blue-400 font-mono text-center mb-8 text-base font-medium">
-                      {labelSanitized}.veilsdk.eth
+                      {labelSanitized}.{effectiveRoot}
                     </p>
 
                     <div className="space-y-2">
