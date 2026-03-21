@@ -1,0 +1,3 @@
+{
+  "installCommand": "npm install && cd .. && npm install --omit=dev"
+}
