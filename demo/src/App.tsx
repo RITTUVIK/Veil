@@ -400,7 +400,7 @@ export default function App() {
 
   return (
     <LampContainer className="bg-black">
-      <div className="w-full max-w-[calc(100vw-2rem)] sm:max-w-xl md:max-w-2xl mx-auto px-2 sm:px-4">
+      <div className="w-full">
         {/* Top bar: wallet badge + network warning */}
         <AnimatePresence>
           {address && appState !== "disconnected" && (
@@ -460,17 +460,17 @@ export default function App() {
                     {...fadeSlide}
                     className="flex flex-col items-center text-center"
                   >
-                    <h1 className="text-5xl sm:text-7xl font-extrabold text-white tracking-[-0.04em] mb-3">
+                    <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold text-white tracking-[-0.04em] mb-3">
                       Veil
                     </h1>
-                    <p className="text-slate-500 text-base sm:text-lg mb-12 max-w-sm leading-relaxed">
+                    <p className="text-slate-500 text-sm sm:text-base md:text-lg mb-8 sm:mb-12 max-w-sm leading-relaxed">
                       Give your AI agent a name, a passport, and a wallet. All in one call.
                     </p>
                     <motion.button
                       onClick={openConnectModal}
                       whileHover={{ scale: 1.03 }}
                       whileTap={{ scale: 0.97 }}
-                      className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold px-10 py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/25 text-lg"
+                      className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold px-8 sm:px-10 py-3.5 sm:py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/25 text-base sm:text-lg"
                     >
                       <Wallet className="w-5 h-5" />
                       Connect Wallet
@@ -492,9 +492,9 @@ export default function App() {
                       <img
                         src="/veil-logo.png"
                         alt="Veil"
-                        className="w-36 h-36 -mt-4 object-contain mb-2 drop-shadow-[0_0_12px_rgba(59,130,246,0.3)]"
+                        className="w-24 h-24 sm:w-28 sm:h-28 md:w-36 md:h-36 -mt-2 sm:-mt-4 object-contain mb-2 drop-shadow-[0_0_12px_rgba(59,130,246,0.3)]"
                       />
-                      <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-[-0.04em]">
+                      <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold text-white tracking-[-0.04em]">
                         Register your agent
                       </h2>
                       <p className="text-slate-500 text-sm mt-2 max-w-xs text-center leading-relaxed">
@@ -512,7 +512,7 @@ export default function App() {
                           value={label}
                           onChange={(e) => setLabel(e.target.value)}
                           placeholder="myagent"
-                          className="flex-1 bg-transparent text-white text-lg px-5 py-4 outline-none placeholder:text-slate-700 font-mono"
+                          className="flex-1 bg-transparent text-white text-base sm:text-lg px-4 sm:px-5 py-3 sm:py-4 outline-none placeholder:text-slate-700 font-mono"
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && labelSanitized) onRegister();
                           }}
@@ -590,7 +590,7 @@ export default function App() {
                       disabled={!labelSanitized || onWrongNetwork}
                       whileHover={labelSanitized ? { scale: 1.02 } : {}}
                       whileTap={labelSanitized ? { scale: 0.98 } : {}}
-                      className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/25 text-lg tracking-wide"
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-3.5 sm:py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/25 text-base sm:text-lg tracking-wide"
                     >
                       Register Agent
                     </motion.button>
@@ -607,14 +607,14 @@ export default function App() {
                 {/* ─── Registering ─── */}
                 {appState === "registering" && (
                   <motion.div key="registering" {...fadeSlide}>
-                    <h2 className="text-2xl font-bold text-white mb-1 text-center tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-bold text-white mb-1 text-center tracking-tight">
                       Registering
                     </h2>
-                    <p className="text-blue-400 font-mono text-center mb-8 text-base font-medium">
+                    <p className="text-blue-400 font-mono text-center mb-5 sm:mb-8 text-sm sm:text-base font-medium">
                       {labelSanitized}.{effectiveRoot}
                     </p>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1.5 sm:space-y-2 max-h-[50vh] overflow-y-auto">
                       {steps.map((step, i) => (
                         <motion.div
                           key={step.key}
@@ -625,7 +625,7 @@ export default function App() {
                             duration: 0.3,
                             ease: "easeOut",
                           }}
-                          className={`flex items-center justify-between py-3.5 px-5 rounded-xl transition-colors duration-300 ${
+                          className={`flex items-center justify-between py-2.5 sm:py-3.5 px-3.5 sm:px-5 rounded-xl transition-colors duration-300 ${
                             step.status === "running"
                               ? step.key === "locus_register"
                                 ? "bg-emerald-500/[0.06] border-[0.75px] border-emerald-500/[0.12]"
@@ -638,7 +638,7 @@ export default function App() {
                           }`}
                         >
                           <span
-                            className={`text-sm font-medium transition-colors duration-300 ${
+                            className={`text-xs sm:text-sm font-medium transition-colors duration-300 ${
                               step.status === "idle"
                                 ? "text-slate-500"
                                 : step.status === "running"
