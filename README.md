@@ -98,6 +98,17 @@ VITE_LOCUS_API_URL=https://beta-api.paywithlocus.com
 
 Without this variable, Locus runs in simulation mode with fixed policy values. The registration and send steps still execute against the interface; they return simulated responses rather than hitting live endpoints.
 
+**WalletConnect / Reown setup (for custom deployments)**
+
+The demo uses a default WalletConnect project ID. If you deploy to your own domain you need to add it to the project's allowed origins:
+
+1. Go to [cloud.reown.com](https://cloud.reown.com) and sign in
+2. Open the project associated with the project ID in `demo/src/wagmi.ts`
+3. Under **Allowed Domains**, add your deployment URL (e.g. `veil-rose.vercel.app`)
+4. Alternatively, create your own project at cloud.reown.com and set `VITE_WALLETCONNECT_PROJECT_ID` in `demo/.env`
+
+Without this, WalletConnect mobile wallets will show an "Origin not found on Allowlist" error. Injected wallets like MetaMask browser extension still work without it.
+
 ---
 
 ## Architecture

@@ -400,7 +400,7 @@ export default function App() {
 
   return (
     <LampContainer className="bg-black">
-      <div className="w-full max-w-xl sm:max-w-2xl px-4">
+      <div className="w-full max-w-[calc(100vw-2rem)] sm:max-w-xl md:max-w-2xl mx-auto px-2 sm:px-4">
         {/* Top bar: wallet badge + network warning */}
         <AnimatePresence>
           {address && appState !== "disconnected" && (
@@ -451,7 +451,7 @@ export default function App() {
           {/* Inner card — solid black, pops against the shell gap */}
           <div className="relative rounded-xl border-[0.75px] border-white/[0.08] bg-black overflow-hidden">
 
-            <div className="relative p-8 sm:p-12">
+            <div className="relative p-5 sm:p-8 md:p-12">
               <AnimatePresence mode="wait">
                 {/* ─── Disconnected ─── */}
                 {appState === "disconnected" && (

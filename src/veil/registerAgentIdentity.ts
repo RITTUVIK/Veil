@@ -361,8 +361,8 @@ export async function registerAgentIdentity(
   } else {
     const { chainId } = await params.provider.getNetwork();
     const chainIdNumber = Number(chainId);
-    // Fix 2: 15-minute deadline instead of 280 seconds.
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 900);
+    // 5-minute deadline; the contract enforces a maximum delay cap.
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
 
     // Must match IdentityRegistryUpgradeable:
     //   __EIP712_init("ERC8004IdentityRegistry", "1")
