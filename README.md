@@ -20,36 +20,56 @@ Veil solves the identity side with a single SDK call. Your agent gets a `.eth` n
 6. Register the agent in the ERC-8004 Identity Registry
 7. Link the agent wallet via `setAgentWallet` using an EIP-712 signature from the agent key
 
-The result is an agent with a human-readable name, a verifiable on-chain passport, and a provable connection to its owner — all in one call.
+
+
+The result is an agent with a human-readable name, a verifiable on-chain passport, and a provable connection to its owner. All in one call.
 
 ---
 
 ## SDK usage
 
+### Default: register under veilsdk.eth
+
+The simplest way to get started. Your agent is registered as a subdomain under `veilsdk.eth`.
+
 ```ts
-import { ethers } from "ethers";
 import { registerAgentIdentity } from "veil";
 
 const result = await registerAgentIdentity({
   provider,
-  humanSigner,        // must own the root ENS name on this network
-  agentSigner,        // must match agentWalletAddress; signs the reverse claim and EIP-712
-  agentWalletAddress: "0xYourAgentAddress",
+  humanSigner,                          // your wallet, must own veilsdk.eth on Sepolia
+  agentSigner,                          // the agent's wallet, signs the EIP-712 proof
+  agentWalletAddress: "0xAgentWallet",
   label: "myagent",
-  rootName: "veilsdk.eth", // optional, defaults to veilsdk.eth
 });
 
 console.log(result.agentEnsName); // myagent.veilsdk.eth
 console.log(result.txHashes);     // seven Ethereum transaction hashes
 ```
 
-All steps are idempotent. If a step has already been completed on a previous run, it is skipped and the function continues from where it left off.
+### Custom domain: register under your own .eth name
 
----
+If you own a `.eth` name on Sepolia, pass it as `rootName` and your agents will live under your domain instead.
 
-## Custom root domain
+```ts
+import { registerAgentIdentity } from "veil";
 
-By default agents are registered under `veilsdk.eth`. If you own a `.eth` name on Sepolia you can pass it as `rootName` and your agents will be registered under your domain instead. The demo UI exposes this as an optional input in the Advanced section.
+const result = await registerAgentIdentity({
+  provider,
+  humanSigner,                          // your wallet, must own john.eth on Sepolia
+  agentSigner,                          // the agent's wallet, signs the EIP-712 proof
+  agentWalletAddress: "0xAgentWallet",
+  label: "myagent",
+  rootName: "john.eth",
+});
+
+console.log(result.agentEnsName); // myagent.john.eth
+console.log(result.txHashes);     // seven Ethereum transaction hashes
+```
+
+All steps are idempotent. If a step was already completed on a previous run it is skipped and the function continues from where it left off.
+
+The demo UI exposes the custom domain option as an optional input in the Advanced section of the registration form.
 
 ---
 
