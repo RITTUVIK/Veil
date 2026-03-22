@@ -87,7 +87,7 @@ npm run dev
 
 Open `http://localhost:5173` and connect a wallet on Sepolia.
 
-After the seven identity steps complete, the demo registers the agent with Locus and displays a spend controls dashboard showing wallet status, policy tiers, and a USDC send form.
+After the seven identity steps complete, the demo registers the agent with Locus (step 8) and logs the registration on Status Network (step 9), then displays a spend controls dashboard showing wallet status, policy tiers, and a USDC send form.
 
 **Optional: connect a live Locus API**
 
@@ -111,6 +111,7 @@ demo/                         React demo app
     wagmi.ts                  chain and wallet configuration
     lib/ethersAdapter.ts      converts wagmi WalletClient to ethers signer
     services/locus.ts         Locus adapter with simulation and live API support
+    services/statusNetwork.ts gasless agent logging on Status Network
     components/               IdentityCard, LocusCard, ExecutionCard
     App.tsx                   registration flow and dashboard
 ```
@@ -142,6 +143,34 @@ All addresses can be overridden via SDK parameters if you need to point at a dif
 
 ---
 
+## Status Network integration
+
+After identity registration completes, the demo logs the agent's ENS name on the Status Network Sepolia Testnet via a gasless transaction (gas = 0, gasPrice = 0). This uses the AgentRegistry smart contract deployed on Status Network.
+
+| Property | Value |
+| --- | --- |
+| Network | Status Network Sepolia Testnet |
+| Chain ID | `1660990954` |
+| RPC URL | `https://public.sepolia.rpc.status.network` |
+| Block Explorer | `https://sepoliascan.status.network` |
+| AgentRegistry contract | `0x5740a90c0193101998bC27EBFb8e3705f7A4672A` |
+| Deployment tx | [`0x545be90a...`](https://sepoliascan.status.network/tx/0x545be90a6c87b07e15be0d4ae1fb3cef3574e5375bdfcb73889b4df7a1fcd3ea) |
+| Test registration tx | [`0x70b0c7ce...`](https://sepoliascan.status.network/tx/0x70b0c7ce36a052434408dadd85bdd20111bcf0b7febb92848ca63ebee8a0f9f0) |
+
+The AgentRegistry contract emits an `AgentRegistered` event with the ENS name, agent wallet address, sender address, and timestamp. Transactions are gasless because Status Network uses RLN (Rate Limiting Nullifier) to replace gas fees with cryptographic rate limits.
+
+**To add Status Network to MetaMask:**
+
+| Field | Value |
+| --- | --- |
+| Network Name | Status Network Testnet |
+| RPC URL | `https://public.sepolia.rpc.status.network` |
+| Chain ID | `1660990954` |
+| Currency Symbol | ETH |
+| Block Explorer | `https://sepoliascan.status.network` |
+
+---
+
 ## Built for
 
 Synthesis Hackathon 2026
@@ -150,6 +179,7 @@ Synthesis Hackathon 2026
 - ENS Communication
 - ENS Open Integration
 - Best Use of Locus
+- Status Network
 
 ---
 

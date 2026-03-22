@@ -23,6 +23,7 @@ import {
   type LocusWalletStatus,
   type LocusPolicySnapshot,
 } from "./services/locus";
+import { logAgentOnStatusNetwork } from "./services/statusNetwork";
 import { truncAddr } from "./lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wallet, CheckCircle, XCircle, Loader2, ChevronDown, AlertTriangle } from "lucide-react";
@@ -32,7 +33,7 @@ import { Wallet, CheckCircle, XCircle, Loader2, ChevronDown, AlertTriangle } fro
 // ────────────────────────────────────────────────────────────
 
 type Phase = "idle" | "registering" | "dashboard";
-type DemoStepKey = RegisterAgentIdentityStep | "locus_register";
+type DemoStepKey = RegisterAgentIdentityStep | "locus_register" | "status_log";
 type StepStatus = "idle" | "running" | "ok" | "error";
 
 interface StepInfo {
@@ -51,6 +52,7 @@ const ALL_STEPS: { key: DemoStepKey; label: string }[] = [
   { key: "erc8004_register", label: "Register on-chain identity" },
   { key: "erc8004_setAgentWallet", label: "Link agent wallet" },
   { key: "locus_register", label: "Set up spend wallet" },
+  { key: "status_log", label: "Log on Status Network" },
 ];
 
 const IDENTITY_STEP_KEYS = ALL_STEPS
@@ -225,6 +227,29 @@ export default function App() {
 
       setLocusWallet(wallet);
       setLocusPolicy(policy);
+
+      // ── Step 9: Log on Status Network (gasless) ──
+
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.key === "status_log" ? { ...s, status: "running" } : s,
+        ),
+      );
+
+      const statusResult = await logAgentOnStatusNetwork(
+        res.agentEnsName,
+        agentWallet,
+      );
+      if (requestIdRef.current !== requestId) return;
+
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.key === "status_log"
+            ? { ...s, status: "ok", txHash: statusResult.txHash }
+            : s,
+        ),
+      );
+
       setPhase("dashboard");
     } catch (e: any) {
       if (requestIdRef.current !== requestId) return;

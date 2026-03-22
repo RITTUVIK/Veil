@@ -48,3 +48,6 @@ project.json
 !/package-lock.json
 !/tsconfig.json
 !/vercel.json
+
+# Deployer key (Status Network deployment)
+.deployer-key

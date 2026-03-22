@@ -1,0 +1,9 @@
+{
+  "network": "Status Network Sepolia Testnet",
+  "chainId": 1660990954,
+  "contractAddress": "0x5740a90c0193101998bC27EBFb8e3705f7A4672A",
+  "deployTxHash": "0x545be90a6c87b07e15be0d4ae1fb3cef3574e5375bdfcb73889b4df7a1fcd3ea",
+  "deployer": "0x888820c55Cb19850b0359cD2e44A363FE1065CAF",
+  "timestamp": "2026-03-22T00:37:58.788Z",
+  "testRegisterTxHash": "0x70b0c7ce36a052434408dadd85bdd20111bcf0b7febb92848ca63ebee8a0f9f0"
+}

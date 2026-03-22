@@ -1,0 +1,54 @@
+{
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "ensName",
+          "type": "string"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "agentWallet",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "registeredBy",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "timestamp",
+          "type": "uint256"
+        }
+      ],
+      "name": "AgentRegistered",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "ensName",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "agentWallet",
+          "type": "address"
+        }
+      ],
+      "name": "registerAgent",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x6080604052348015600f57600080fd5b5061019a8061001f6000396000f3fe608060405234801561001057600080fd5b506004361061002b5760003560e01c80639305fb5414610030575b600080fd5b61004361003e366004610099565b610045565b005b336001600160a01b0316816001600160a01b03167f08e4365bc5bed1a79d4afad1f92405236e21b59d2caeaa1723894e8aa6962b1b85854260405161008c9392919061012b565b60405180910390a3505050565b6000806000604084860312156100ae57600080fd5b833567ffffffffffffffff8111156100c557600080fd5b8401601f810186136100d657600080fd5b803567ffffffffffffffff8111156100ed57600080fd5b8660208284010111156100ff57600080fd5b6020918201945092508401356001600160a01b038116811461012057600080fd5b809150509250925092565b604081528260408201528284606083013760006060848301015260006060601f19601f860116830101905082602083015294935050505056fea2646970667358221220f6d0e54f9f91d4ae0fe7f2f896fe2cf9941dc4867bde7041d765aed0f50e6bfe64736f6c63430008220033"
+}
