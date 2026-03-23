@@ -1,6 +1,16 @@
-# Veil
+<p align="center">
+  <img src="docs/cover.png" alt="Veil" width="200" />
+</p>
 
-Identity infrastructure for AI agents.
+<h1 align="center">Veil</h1>
+
+<p align="center">
+  Identity infrastructure for AI agents.
+  <br />
+  <a href="https://veil-rose.vercel.app/">Live Demo</a> &middot; <a href="https://www.youtube.com/watch?v=tuQPsiSOqEE">Video</a> &middot; <a href="https://github.com/RITTUVIK/Veil">GitHub</a>
+</p>
+
+---
 
 AI agents are anonymous. When an agent takes an action, makes a payment, or communicates with another agent, there is no way to know who built it, who is accountable for it, or whether it can be trusted.
 
@@ -19,8 +29,6 @@ Veil solves the identity side with a single SDK call. Your agent gets a `.eth` n
 5. Set the reverse name so the agent wallet resolves back to the ENS name
 6. Register the agent in the ERC-8004 Identity Registry
 7. Link the agent wallet via `setAgentWallet` using an EIP-712 signature from the agent key
-
-
 
 The result is an agent with a human-readable name, a verifiable on-chain passport, and a provable connection to its owner. All in one call.
 
@@ -69,13 +77,33 @@ console.log(result.txHashes);     // seven Ethereum transaction hashes
 
 All steps are idempotent. If a step was already completed on a previous run it is skipped and the function continues from where it left off.
 
-The demo UI exposes the custom domain option as an optional input in the Advanced section of the registration form.
+---
+
+## Mainnet compatible
+
+The SDK works on any EVM chain with ENS and ERC-8004 deployed. Pass the appropriate contract addresses:
+
+```ts
+await registerAgentIdentity({
+  provider: mainnetProvider,
+  humanSigner,
+  agentSigner,
+  agentWalletAddress: "0x...",
+  label: "myagent",
+  rootName: "mydomain.eth",
+  publicResolverAddress: "0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63",
+  reverseRegistrarAddress: "0xa58E81fe9b61B5c3fE2AFD33CF304c454AbFc7Cb",
+  identityRegistryAddress: "0x...", // ERC-8004 on mainnet
+});
+```
 
 ---
 
 ## Demo app
 
-The demo is a React app built with RainbowKit and wagmi. It walks through the full registration flow and then shows an agent dashboard with identity details, an ENS name, and a Locus spend wallet.
+The demo is a React app built with Vite. It walks through the full registration flow and then shows an agent dashboard with identity details, an ENS name greeting, and integration with Locus spend wallets and Status Network.
+
+**Live:** [veil-rose.vercel.app](https://veil-rose.vercel.app/)
 
 **To run locally:**
 
@@ -89,26 +117,6 @@ Open `http://localhost:5173` and connect a wallet on Sepolia.
 
 After the seven identity steps complete, the demo registers the agent with Locus (step 8) and logs the registration on Status Network (step 9), then displays a spend controls dashboard showing wallet status, policy tiers, and a USDC send form.
 
-**Optional: connect a live Locus API**
-
-```bash
-# demo/.env
-VITE_LOCUS_API_URL=https://beta-api.paywithlocus.com
-```
-
-Without this variable, Locus runs in simulation mode with fixed policy values. The registration and send steps still execute against the interface; they return simulated responses rather than hitting live endpoints.
-
-**WalletConnect / Reown setup (for custom deployments)**
-
-The demo uses a default WalletConnect project ID. If you deploy to your own domain you need to add it to the project's allowed origins:
-
-1. Go to [cloud.reown.com](https://cloud.reown.com) and sign in
-2. Open the project associated with the project ID in `demo/src/wagmi.ts`
-3. Under **Allowed Domains**, add your deployment URL (e.g. `veil-rose.vercel.app`)
-4. Alternatively, create your own project at cloud.reown.com and set `VITE_WALLETCONNECT_PROJECT_ID` in `demo/.env`
-
-Without this, WalletConnect mobile wallets will show an "Origin not found on Allowlist" error. Injected wallets like MetaMask browser extension still work without it.
-
 ---
 
 ## Architecture
@@ -117,6 +125,8 @@ Without this, WalletConnect mobile wallets will show an "Origin not found on All
 src/                          TypeScript SDK (package name: veil)
   veil/                       registerAgentIdentity, agent URI helpers
   ens/                        namehash, labelhash utilities
+contracts/                    VeilSubdomainRegistrar (Solidity)
+scripts/                      deployment and ENS management scripts
 demo/                         React demo app
   src/
     wagmi.ts                  chain and wallet configuration
@@ -129,19 +139,9 @@ demo/                         React demo app
 
 ---
 
-## Prerequisites
-
-- Sepolia ETH in the wallet that will sign transactions
-- The human wallet must own the root ENS name on Sepolia (`veilsdk.eth` by default, or your own domain if using a custom root)
-- If the agent wallet is a separate address from the human wallet, it must be funded with enough Sepolia ETH to cover the reverse-claim transaction
-
----
-
 ## Network
 
-Everything runs on **Sepolia testnet**. No mainnet transactions are made.
-
-Contract addresses used by default:
+Everything runs on **Sepolia testnet** by default. No mainnet transactions are made unless you override the provider and contract addresses.
 
 | Contract | Address |
 | --- | --- |
@@ -150,47 +150,32 @@ Contract addresses used by default:
 | ENS Reverse Registrar | `0xA0a1AbcDAe1a2a4A2EF8e9113Ff0e02DD81DC0C6` |
 | ERC-8004 Identity Registry | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
 
-All addresses can be overridden via SDK parameters if you need to point at a different deployment.
-
 ---
 
 ## Status Network integration
 
-After identity registration completes, the demo logs the agent's ENS name on the Status Network Sepolia Testnet via a gasless transaction (gas = 0, gasPrice = 0). This uses the AgentRegistry smart contract deployed on Status Network.
+After identity registration, the demo logs the agent's ENS name on Status Network Sepolia Testnet via a gasless transaction (gas = 0). This uses the AgentRegistry smart contract deployed on Status Network.
 
 | Property | Value |
 | --- | --- |
-| Network | Status Network Sepolia Testnet |
 | Chain ID | `1660990954` |
 | RPC URL | `https://public.sepolia.rpc.status.network` |
-| Block Explorer | `https://sepoliascan.status.network` |
 | AgentRegistry contract | `0x5740a90c0193101998bC27EBFb8e3705f7A4672A` |
-| Deployment tx | [`0x545be90a...`](https://sepoliascan.status.network/tx/0x545be90a6c87b07e15be0d4ae1fb3cef3574e5375bdfcb73889b4df7a1fcd3ea) |
-| Test registration tx | [`0x70b0c7ce...`](https://sepoliascan.status.network/tx/0x70b0c7ce36a052434408dadd85bdd20111bcf0b7febb92848ca63ebee8a0f9f0) |
 
-The AgentRegistry contract emits an `AgentRegistered` event with the ENS name, agent wallet address, sender address, and timestamp. Transactions are gasless because Status Network uses RLN (Rate Limiting Nullifier) to replace gas fees with cryptographic rate limits.
-
-**To add Status Network to MetaMask:**
-
-| Field | Value |
-| --- | --- |
-| Network Name | Status Network Testnet |
-| RPC URL | `https://public.sepolia.rpc.status.network` |
-| Chain ID | `1660990954` |
-| Currency Symbol | ETH |
-| Block Explorer | `https://sepoliascan.status.network` |
+Transactions are gasless because Status Network uses RLN (Rate Limiting Nullifier) to replace gas fees with cryptographic rate limits.
 
 ---
 
 ## Built for
 
-Synthesis Hackathon 2026
+[The Synthesis Hackathon 2026](https://synthesis.md)
 
 - ENS Identity
 - ENS Communication
 - ENS Open Integration
-- Best Use of Locus
+- Student Founder's Bet
 - Status Network
+- Synthesis Open Track
 
 ---
 
