@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAccount, useChainId, useEnsName, useSwitchChain } from "wagmi";
+import { useAccount, useChainId, useDisconnect, useEnsName, useSwitchChain } from "wagmi";
 import { getWalletClient } from "wagmi/actions";
 import { useConnectModal, useAccountModal } from "@rainbow-me/rainbowkit";
 import { mainnet, sepolia } from "wagmi/chains";
@@ -26,7 +26,7 @@ import {
 import { logAgentOnStatusNetwork } from "./services/statusNetwork";
 import { truncAddr } from "./lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wallet, CheckCircle, XCircle, Loader2, AlertTriangle, Pencil, Check } from "lucide-react";
+import { Wallet, CheckCircle, XCircle, Loader2, Pencil, Check } from "lucide-react";
 
 // ────────────────────────────────────────────────────────────
 // Step / state types
@@ -68,17 +68,23 @@ export default function App() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
+  const { disconnect } = useDisconnect();
   const { openConnectModal } = useConnectModal();
   const { openAccountModal } = useAccountModal();
-  const { data: ensNameReal, isLoading: ensLoadingReal } = useEnsName({
+  // ENS primary name: try mainnet first (canonical), fall back to Sepolia testnet
+  const { data: ensNameMainnet, isLoading: ensLoadingMainnet } = useEnsName({
     address,
     chainId: mainnet.id,
+  });
+  const { data: ensNameSepolia, isLoading: ensLoadingSepolia } = useEnsName({
+    address,
+    chainId: sepolia.id,
   });
 
   // DEV-ONLY: set VITE_ENS_MOCK=nick.eth in .env.local to simulate a resolved primary name
   const ensMock = import.meta.env.VITE_ENS_MOCK as string | undefined;
-  const ensName = ensMock || ensNameReal;
-  const ensLoading = ensMock ? false : ensLoadingReal;
+  const ensName = ensMock || ensNameMainnet || ensNameSepolia;
+  const ensLoading = ensMock ? false : (ensLoadingMainnet || ensLoadingSepolia);
 
   const displayName = ensLoading
     ? "…"
@@ -120,7 +126,7 @@ export default function App() {
     const trimmed = rootName.trim().toLowerCase();
     return trimmed || "veilsdk.eth";
   }, [rootName]);
-  const isCustomRoot = rootName.trim().length > 0;
+
 
   // Derive display state from connection + phase
   const appState = !isConnected
@@ -343,15 +349,24 @@ export default function App() {
                 New Agent
               </button>
               {address && (
-                <button
-                  onClick={openAccountModal}
-                  className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1.5 hover:bg-white/[0.06] transition-colors"
-                >
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                  <span className="text-xs text-slate-400 font-mono">
-                    {displayName}
-                  </span>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={openAccountModal}
+                    className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1.5 hover:bg-white/[0.06] transition-colors"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                    <span className="text-xs text-slate-400 font-mono">
+                      {displayName}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => disconnect()}
+                    className="text-slate-600 hover:text-red-400 transition-colors p-1"
+                    title="Disconnect wallet"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -452,6 +467,13 @@ export default function App() {
                 <span className="text-xs text-slate-300 font-mono">
                   {displayName}
                 </span>
+              </button>
+              <button
+                onClick={() => disconnect()}
+                className="text-slate-600 hover:text-red-400 transition-colors p-1"
+                title="Disconnect wallet"
+              >
+                <XCircle className="w-3.5 h-3.5" />
               </button>
             </motion.div>
           )}
@@ -597,22 +619,6 @@ export default function App() {
                         </span>
                       </div>
 
-                      {/* Warning when using a custom root */}
-                      <AnimatePresence>
-                        {isCustomRoot && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            className="flex items-start gap-2 mt-3 p-3 bg-amber-500/[0.06] border-[0.75px] border-amber-500/[0.15] rounded-lg"
-                          >
-                            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                            <p className="text-xs text-amber-400 leading-relaxed">
-                              Make sure your wallet owns <span className="font-mono font-medium">{effectiveRoot}</span> on Sepolia or registration will fail.
-                            </p>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
                     </div>
 
                     <motion.button
