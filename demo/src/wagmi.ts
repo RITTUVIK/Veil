@@ -1,5 +1,5 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { sepolia, baseSepolia } from "wagmi/chains";
+import { mainnet, sepolia, baseSepolia } from "wagmi/chains";
 import { http } from "wagmi";
 
 // RainbowKit's getDefaultConfig wires up WalletConnect, injected, Coinbase,
@@ -19,5 +19,7 @@ export const config = getDefaultConfig({
     // default viem fallback which gets rate-limited quickly.
     [sepolia.id]: http("https://ethereum-sepolia-rpc.publicnode.com"),
     [baseSepolia.id]: http("https://base-sepolia-rpc.publicnode.com"),
+    // Mainnet transport needed for ENS primary name resolution (L1)
+    [mainnet.id]: http("https://ethereum-rpc.publicnode.com"),
   },
 });

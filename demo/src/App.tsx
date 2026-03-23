@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAccount, useChainId, useSwitchChain } from "wagmi";
+import { useAccount, useChainId, useEnsName, useSwitchChain } from "wagmi";
 import { getWalletClient } from "wagmi/actions";
 import { useConnectModal, useAccountModal } from "@rainbow-me/rainbowkit";
-import { sepolia } from "wagmi/chains";
+import { mainnet, sepolia } from "wagmi/chains";
 import { config } from "./wagmi";
 import { walletClientToEthers } from "./lib/ethersAdapter";
 import {
@@ -26,7 +26,7 @@ import {
 import { logAgentOnStatusNetwork } from "./services/statusNetwork";
 import { truncAddr } from "./lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wallet, CheckCircle, XCircle, Loader2, ChevronDown, AlertTriangle } from "lucide-react";
+import { Wallet, CheckCircle, XCircle, Loader2, AlertTriangle, Pencil, Check } from "lucide-react";
 
 // ────────────────────────────────────────────────────────────
 // Step / state types
@@ -70,6 +70,19 @@ export default function App() {
   const { switchChain } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
   const { openAccountModal } = useAccountModal();
+  const { data: ensNameReal, isLoading: ensLoadingReal } = useEnsName({
+    address,
+    chainId: mainnet.id,
+  });
+
+  // DEV-ONLY: set VITE_ENS_MOCK=nick.eth in .env.local to simulate a resolved primary name
+  const ensMock = import.meta.env.VITE_ENS_MOCK as string | undefined;
+  const ensName = ensMock || ensNameReal;
+  const ensLoading = ensMock ? false : ensLoadingReal;
+
+  const displayName = ensLoading
+    ? "…"
+    : ensName ?? (address ? truncAddr(address) : "");
 
   const onWrongNetwork = isConnected && chainId !== sepolia.id;
 
@@ -78,7 +91,8 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [label, setLabel] = useState("");
   const [rootName, setRootName] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const rootNameTouchedRef = useRef(false);
+  const [editingRoot, setEditingRoot] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agentWalletAddress, setAgentWalletAddress] = useState<string | null>(null);
   const [result, setResult] = useState<null | {
@@ -93,6 +107,13 @@ export default function App() {
   const [locusAgent, setLocusAgent] = useState<LocusAgent | null>(null);
   const [locusWallet, setLocusWallet] = useState<LocusWalletStatus | null>(null);
   const [locusPolicy, setLocusPolicy] = useState<LocusPolicySnapshot | null>(null);
+
+  // Prefill rootName with ENS primary name when it resolves
+  useEffect(() => {
+    if (ensName && !rootNameTouchedRef.current) {
+      setRootName(ensName);
+    }
+  }, [ensName]);
 
   const labelSanitized = useMemo(() => label.trim().toLowerCase(), [label]);
   const effectiveRoot = useMemo(() => {
@@ -282,7 +303,8 @@ export default function App() {
     setResult(null);
     setLabel("");
     setRootName("");
-    setShowAdvanced(false);
+    rootNameTouchedRef.current = false;
+    setEditingRoot(false);
     setSteps(ALL_STEPS.map((s) => ({ ...s, status: "idle" })));
     setLocusAgent(null);
     setLocusWallet(null);
@@ -327,7 +349,7 @@ export default function App() {
                 >
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
                   <span className="text-xs text-slate-400 font-mono">
-                    {truncAddr(address)}
+                    {displayName}
                   </span>
                 </button>
               )}
@@ -428,7 +450,7 @@ export default function App() {
                   }`}
                 />
                 <span className="text-xs text-slate-300 font-mono">
-                  {truncAddr(address)}
+                  {displayName}
                 </span>
               </button>
             </motion.div>
@@ -487,7 +509,7 @@ export default function App() {
                     {...fadeSlide}
                     className="flex flex-col"
                   >
-                    {/* Header with logo */}
+                    {/* Personalised greeting */}
                     <div className="flex flex-col items-center mb-8">
                       <img
                         src="/veil-logo.png"
@@ -495,14 +517,21 @@ export default function App() {
                         className="w-24 h-24 sm:w-28 sm:h-28 md:w-36 md:h-36 -mt-2 sm:-mt-4 object-contain mb-2 drop-shadow-[0_0_12px_rgba(59,130,246,0.3)]"
                       />
                       <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold text-white tracking-[-0.04em]">
-                        Register your agent
+                        {ensLoading ? (
+                          <span className="text-slate-500">connecting…</span>
+                        ) : ensName ? (
+                          <>hey, <span className="text-blue-400">{ensName}</span></>
+                        ) : (
+                          "Register your agent"
+                        )}
                       </h2>
                       <p className="text-slate-500 text-sm mt-2 max-w-xs text-center leading-relaxed">
                         Give your AI agent a verified .eth name and on-chain identity passport
                       </p>
                     </div>
 
-                    <div className="mb-6">
+                    {/* Agent name input */}
+                    <div className="mb-4">
                       <label className="text-sm text-slate-500 mb-2.5 block font-medium tracking-wide">
                         Agent name
                       </label>
@@ -517,69 +546,70 @@ export default function App() {
                             if (e.key === "Enter" && labelSanitized) onRegister();
                           }}
                         />
-                        <span className="text-slate-500 pr-5 text-sm font-mono font-medium">
-                          .{effectiveRoot}
-                        </span>
                       </div>
-                      <p className="mt-2 text-xs text-slate-600">
-                        Your agent will be registered as:{" "}
-                        <span className="font-mono text-slate-500">
-                          {labelSanitized || "<name>"}.{effectiveRoot}
-                        </span>
-                      </p>
                     </div>
 
-                    {/* Advanced: custom root domain */}
+                    {/* Live preview with inline-editable root */}
                     <div className="mb-8">
-                      <button
-                        type="button"
-                        onClick={() => setShowAdvanced((v) => !v)}
-                        className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-400 transition-colors font-medium"
-                      >
-                        <ChevronDown
-                          className={`w-3.5 h-3.5 transition-transform duration-200 ${showAdvanced ? "rotate-180" : ""}`}
-                        />
-                        Advanced
-                      </button>
-
-                      <AnimatePresence>
-                        {showAdvanced && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                            className="overflow-hidden"
-                          >
-                            <div className="pt-4">
-                              <label className="text-sm mb-2 block">
-                                <span className="text-slate-500 font-medium tracking-wide">Use your own .eth domain</span>
-                                <br />
-                                <span className="text-xs text-slate-600 font-normal">Own a .eth name? Your agents will live under it instead.</span>
-                              </label>
+                      <div className="flex items-center gap-2 min-h-[2rem]">
+                        <span className="text-xs text-slate-600">Registering as</span>
+                        <span className="font-mono text-sm text-slate-300">
+                          {labelSanitized || "<name>"}
+                          <span className="text-slate-500">.</span>
+                          {editingRoot ? (
+                            <>
                               <input
                                 type="text"
                                 value={rootName}
-                                onChange={(e) => setRootName(e.target.value)}
-                                placeholder="yourname.eth"
-                                className="w-full bg-white/[0.03] border-[0.75px] border-white/[0.08] rounded-xl text-white text-base px-5 py-3.5 outline-none placeholder:text-slate-700 font-mono focus:border-blue-500/40 focus:bg-white/[0.05] transition-all duration-200"
+                                onChange={(e) => {
+                                  rootNameTouchedRef.current = true;
+                                  setRootName(e.target.value);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") setEditingRoot(false);
+                                }}
+                                placeholder="veilsdk.eth"
+                                autoFocus
+                                className="inline-block bg-white/[0.04] border-[0.75px] border-blue-500/40 rounded px-1.5 py-0.5 text-sm text-white font-mono outline-none w-36 placeholder:text-slate-700"
                               />
-                              <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-                                Own a .eth name? Your agents will live under it. like myagent.yourname.eth instead of myagent.veilsdk.eth
-                              </p>
-                              {isCustomRoot && (
-                                <motion.div
-                                  initial={{ opacity: 0, y: 4 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  className="flex items-start gap-2 mt-3 p-3 bg-amber-500/[0.06] border-[0.75px] border-amber-500/[0.15] rounded-lg"
-                                >
-                                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                                  <p className="text-xs text-amber-400 leading-relaxed">
-                                    Make sure your wallet owns <span className="font-mono font-medium">{effectiveRoot}</span> on Sepolia or registration will fail.
-                                  </p>
-                                </motion.div>
-                              )}
-                            </div>
+                              <button
+                                type="button"
+                                onClick={() => setEditingRoot(false)}
+                                className="inline-flex ml-1 text-green-400 hover:text-green-300 transition-colors align-middle"
+                                title="Confirm"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-blue-400">{effectiveRoot}</span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingRoot(true)}
+                                className="inline-flex ml-1.5 text-slate-600 hover:text-slate-400 transition-colors align-middle"
+                                title="Change domain"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Warning when using a custom root */}
+                      <AnimatePresence>
+                        {isCustomRoot && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            className="flex items-start gap-2 mt-3 p-3 bg-amber-500/[0.06] border-[0.75px] border-amber-500/[0.15] rounded-lg"
+                          >
+                            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                            <p className="text-xs text-amber-400 leading-relaxed">
+                              Make sure your wallet owns <span className="font-mono font-medium">{effectiveRoot}</span> on Sepolia or registration will fail.
+                            </p>
                           </motion.div>
                         )}
                       </AnimatePresence>
